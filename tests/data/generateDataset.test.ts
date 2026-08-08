@@ -12,6 +12,22 @@ test('相同种子与时间生成完全一致且覆盖四个平台', () => {
   expect(a.orders.length).toBeGreaterThan(5000);
 });
 
+test('订单创建时间连续覆盖 now 当日及此前 89 个自然日', () => {
+  const now = new Date('2026-08-08T10:00:00+08:00');
+  const dataset = generateDataset(20260808, now);
+  const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const orderDates = new Set(dataset.orders.map((order) => dateKey(order.createdAt)));
+  const firstDate = new Date(2026, 4, 11);
+  const sortedOrderDates = [...orderDates].sort();
+
+  expect(orderDates.size).toBe(90);
+  expect(sortedOrderDates[0]).toBe('2026-05-11');
+  expect(sortedOrderDates[sortedOrderDates.length - 1]).toBe('2026-08-08');
+  for (let day = 0; day < 90; day += 1) {
+    expect(orderDates.has(dateKey(new Date(firstDate.getTime() + day * 24 * 60 * 60 * 1000)))).toBe(true);
+  }
+});
+
 test('生成的数据保持订单金额、引用和库存一致性', () => {
   const now = new Date('2026-08-08T10:00:00+08:00');
   const dataset = generateDataset(20260808, now);
