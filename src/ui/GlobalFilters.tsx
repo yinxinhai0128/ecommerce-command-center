@@ -11,16 +11,17 @@ export function GlobalFilters(): JSX.Element {
   return (
     <form className="global-filters" aria-label="全局筛选" onSubmit={(event) => event.preventDefault()}>
       <div className="filter-field filter-date">
-        <label id="filter-date-label" htmlFor="filter-start">日期</label>
+        <span>日期</span>
+        <label className="sr-only" htmlFor="filter-start">开始日期</label>
         <input
           id="filter-start"
-          aria-labelledby="filter-date-label"
           type="date"
           value={formatDate(filters.start)}
           onChange={(event) => setFilters((current) => ({ ...current, start: new Date(`${event.target.value}T00:00:00`) }))}
         />
+        <label className="sr-only" htmlFor="filter-end">结束日期</label>
         <input
-          aria-labelledby="filter-date-label"
+          id="filter-end"
           type="date"
           value={formatDate(filters.end)}
           onChange={(event) => setFilters((current) => ({ ...current, end: new Date(`${event.target.value}T23:59:59`) }))}

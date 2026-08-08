@@ -11,10 +11,18 @@ function DashboardApp(): JSX.Element {
       <AppHeader activeTab={activeTab} onTabChange={setActiveTab} />
       <GlobalFilters />
       <section
-        id={`dashboard-panel-${activeTab}`}
+        id="dashboard-panel-realtime"
         className="dashboard-content"
         role="tabpanel"
-        aria-labelledby={`dashboard-tab-${activeTab}`}
+        aria-labelledby="dashboard-tab-realtime"
+        hidden={activeTab !== 'realtime'}
+      />
+      <section
+        id="dashboard-panel-analysis"
+        className="dashboard-content"
+        role="tabpanel"
+        aria-labelledby="dashboard-tab-analysis"
+        hidden={activeTab !== 'analysis'}
       />
     </main>
   );

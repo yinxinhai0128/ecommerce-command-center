@@ -28,6 +28,31 @@ test('点击和左右方向键可切换一级模块', () => {
   expect(analysisTab).toHaveAttribute('aria-selected', 'true');
 });
 
+test('每个标签始终关联对应的内容面板', () => {
+  render(<App />);
+
+  const realtimeTab = screen.getByRole('tab', { name: '实时监控' });
+  const analysisTab = screen.getByRole('tab', { name: '智能分析' });
+  const realtimePanel = document.getElementById(realtimeTab.getAttribute('aria-controls')!);
+  const analysisPanel = document.getElementById(analysisTab.getAttribute('aria-controls')!);
+
+  expect(realtimePanel).toHaveAttribute('role', 'tabpanel');
+  expect(analysisPanel).toHaveAttribute('role', 'tabpanel');
+  expect(analysisPanel).toHaveAttribute('hidden');
+
+  fireEvent.click(analysisTab);
+
+  expect(realtimePanel).toHaveAttribute('hidden');
+  expect(analysisPanel).not.toHaveAttribute('hidden');
+});
+
+test('日期范围的两个原生输入各有可区分的标签', () => {
+  render(<App />);
+
+  expect(screen.getByLabelText('开始日期')).toHaveAttribute('id', 'filter-start');
+  expect(screen.getByLabelText('结束日期')).toHaveAttribute('id', 'filter-end');
+});
+
 test('修改全局筛选会保留所选实际数据选项', () => {
   render(<App />);
 
