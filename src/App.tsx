@@ -1,20 +1,29 @@
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
+import { DashboardProvider } from './app/DashboardProvider';
+import { AppHeader, type DashboardTab } from './ui/AppHeader';
+import { GlobalFilters } from './ui/GlobalFilters';
+
+function DashboardApp(): JSX.Element {
+  const [activeTab, setActiveTab] = useState<DashboardTab>('realtime');
+
+  return (
+    <main className="dashboard-app">
+      <AppHeader activeTab={activeTab} onTabChange={setActiveTab} />
+      <GlobalFilters />
+      <section
+        id={`dashboard-panel-${activeTab}`}
+        className="dashboard-content"
+        role="tabpanel"
+        aria-labelledby={`dashboard-tab-${activeTab}`}
+      />
+    </main>
+  );
+}
 
 export function App(): JSX.Element {
   return (
-    <main>
-      <header>
-        <h1>电商经营驾驶舱</h1>
-        <div role="tablist" aria-label="驾驶舱视图">
-          <button type="button" role="tab" aria-selected="true">
-            实时监控
-          </button>
-          <button type="button" role="tab" aria-selected="false">
-            智能分析
-          </button>
-        </div>
-      </header>
-      <section aria-label="内容区域" />
-    </main>
+    <DashboardProvider>
+      <DashboardApp />
+    </DashboardProvider>
   );
 }

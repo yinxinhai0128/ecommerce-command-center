@@ -1,7 +1,7 @@
 import { createContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { applyEvent, createNextEvent } from '../data/eventSimulator';
 import { generateDataset } from '../data/generateDataset';
-import type { DashboardAlert, DashboardFilters, DashboardSnapshot } from '../domain/types';
+import type { Category, DashboardAlert, DashboardFilters, DashboardSnapshot, Platform, Store } from '../domain/types';
 import { detectAnomalies } from '../metrics/detectAnomalies';
 import { calculateSnapshot } from '../metrics/calculateMetrics';
 
@@ -13,6 +13,11 @@ export type DashboardContextValue = {
   isRunning: boolean;
   toggleRunning: () => void;
   lastUpdatedAt: Date;
+  filterOptions: {
+    platforms: Platform[];
+    stores: Store[];
+    categories: Category[];
+  };
 };
 
 export const DashboardContext = createContext<DashboardContextValue | null>(null);
@@ -43,6 +48,11 @@ export function DashboardProvider({ children }: { children: ReactNode }): ReactN
 
   const snapshot = useMemo(() => calculateSnapshot(dataset, filters, lastUpdatedAt), [dataset, filters, lastUpdatedAt]);
   const alerts = useMemo(() => detectAnomalies(snapshot), [snapshot]);
+  const filterOptions = useMemo(() => ({
+    platforms: Array.from(new Set(dataset.orders.map((order) => order.platform))),
+    stores: dataset.stores,
+    categories: dataset.categories,
+  }), [dataset]);
   const value = useMemo<DashboardContextValue>(() => ({
     snapshot,
     alerts,
@@ -51,7 +61,8 @@ export function DashboardProvider({ children }: { children: ReactNode }): ReactN
     isRunning,
     toggleRunning: () => setIsRunning((running) => !running),
     lastUpdatedAt,
-  }), [alerts, filters, isRunning, lastUpdatedAt, snapshot]);
+    filterOptions,
+  }), [alerts, filterOptions, filters, isRunning, lastUpdatedAt, snapshot]);
 
   return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>;
 }
