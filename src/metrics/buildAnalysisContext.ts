@@ -1,5 +1,11 @@
 import type { AnalysisContext, DashboardAlert, DashboardFilters, DashboardSnapshot } from '../domain/types';
 
+const MAX_CONTEXT_TEXT_LENGTH = 80;
+
+function truncateContextText(value: string): string {
+  return value.slice(0, MAX_CONTEXT_TEXT_LENGTH);
+}
+
 export function buildAnalysisContext(
   snapshot: DashboardSnapshot,
   alerts: DashboardAlert[],
@@ -10,25 +16,25 @@ export function buildAnalysisContext(
       start: filters.start.toISOString(),
       end: filters.end.toISOString(),
       ...(filters.platform ? { platform: filters.platform } : {}),
-      ...(filters.storeId ? { storeId: filters.storeId } : {}),
-      ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+      ...(filters.storeId ? { storeId: truncateContextText(filters.storeId) } : {}),
+      ...(filters.categoryId ? { categoryId: truncateContextText(filters.categoryId) } : {}),
     },
-    comparisonLabel: snapshot.comparisonLabel,
+    comparisonLabel: truncateContextText(snapshot.comparisonLabel),
     kpis: snapshot.kpis,
     topContributors: {
       channels: snapshot.channelRanking.slice(0, 4).map(({ platform, gmv }) => ({ label: platform, value: gmv })),
-      products: snapshot.productRanking.slice(0, 5).map(({ name, gmv }) => ({ label: name, value: gmv })),
-      regions: snapshot.regionRanking.slice(0, 4).map(({ region, gmv }) => ({ label: region, value: gmv })),
+      products: snapshot.productRanking.slice(0, 5).map(({ name, gmv }) => ({ label: truncateContextText(name), value: gmv })),
+      regions: snapshot.regionRanking.slice(0, 4).map(({ region, gmv }) => ({ label: truncateContextText(region), value: gmv })),
     },
     alerts: alerts.slice(0, 10).map(({ severity, metric, title, evidence, impactAmount, suggestion }) => ({
       severity,
       metric,
-      title,
-      evidence,
+      title: truncateContextText(title),
+      evidence: truncateContextText(evidence),
       impactAmount,
-      suggestion,
+      suggestion: truncateContextText(suggestion),
     })),
-    forecast7d: snapshot.forecast7d.slice(0, 7),
+    forecast7d: snapshot.forecast7d.slice(0, 7).map(({ date, gmv }) => ({ date: truncateContextText(date), gmv })),
     targetProbability: snapshot.targetProbability,
   };
 }

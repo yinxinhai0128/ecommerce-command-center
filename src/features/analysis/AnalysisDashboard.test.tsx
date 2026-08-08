@@ -121,6 +121,37 @@ describe('智能分析生命周期', () => {
     expect(latestBody.topContributors.channels[0]).toEqual({ label: '京东', value: 90000 });
   });
 
+  test('数据变化后预测保持已分析版本并在重新分析成功时原子切换', async () => {
+    const { rerender } = renderDashboard();
+    const fetchMock = vi.mocked(fetch);
+    await screen.findByText(result.summary);
+    const latestSnapshot: DashboardSnapshot = {
+      ...changedSnapshot,
+      forecast7d: [{ date: '2026-08-12', gmv: 99000 }],
+      targetProbability: 0.12,
+    };
+    let resolveLatest: ((value: Response) => void) | undefined;
+    fetchMock.mockImplementationOnce(() => new Promise((resolve) => { resolveLatest = resolve; }));
+
+    rerender(<AnalysisDashboard snapshot={latestSnapshot} alerts={alerts} filters={filters} active />);
+
+    expect(screen.getByText('数据已变化，重新分析')).toBeInTheDocument();
+    expect(screen.getByText('72%')).toBeInTheDocument();
+    expect(screen.getByText('¥18,000')).toBeInTheDocument();
+    expect(screen.queryByText('12%')).not.toBeInTheDocument();
+    expect(screen.queryByText('¥99,000')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '数据已变化，重新分析' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('72%')).toBeInTheDocument();
+    expect(screen.queryByText('12%')).not.toBeInTheDocument();
+
+    await act(async () => { resolveLatest?.(response()); });
+    await waitFor(() => expect(screen.getByText('12%')).toBeInTheDocument());
+    expect(screen.getByText('¥99,000')).toBeInTheDocument();
+    expect(screen.queryByText('72%')).not.toBeInTheDocument();
+  });
+
   test('卸载时取消未完成请求', async () => {
     let aborted = false;
     vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
@@ -218,6 +249,21 @@ describe('智能分析内容与问答', () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1]?.body as string).question).toBe('哪些商品导致退款上升？');
     expect(screen.getByRole('log')).toHaveTextContent('哪些商品导致退款上升？');
     expect(screen.getByRole('log')).toHaveTextContent(followUpResult.summary);
+  });
+
+  test('重复的相同问答历史不会产生重复React key警告', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    renderDashboard();
+    const fetchMock = vi.mocked(fetch);
+    await screen.findByText(result.summary);
+
+    fireEvent.click(screen.getByRole('button', { name: '哪些商品导致退款上升？' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole('button', { name: '哪些商品导致退款上升？' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+
+    expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/same key|unique key/i);
+    consoleError.mockRestore();
   });
 
   test('错误状态可重试且Abort不会显示错误', async () => {

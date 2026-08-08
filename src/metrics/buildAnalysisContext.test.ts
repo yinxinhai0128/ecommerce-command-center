@@ -88,3 +88,35 @@ test('分析上下文绝不包含订单明细或完整销售趋势且小于30KB'
   expect(serialized).not.toContain('createdAt');
   expect(serialized).not.toContain('alert-0');
 });
+
+test('超长中文业务文本会被确定性压缩且保留可用分析结构', () => {
+  const longText = '超长经营文本'.repeat(5000);
+  const oversizedSnapshot: DashboardSnapshot = {
+    ...snapshot,
+    comparisonLabel: longText,
+    productRanking: Array.from({ length: 5 }, (_, index) => ({ productId: `${index}-${longText}`, name: `${index}${longText}`, gmv: 7000 - index })),
+    regionRanking: Array.from({ length: 4 }, (_, index) => ({ region: `${index}${longText}`, gmv: 5000 - index })),
+  };
+  const oversizedAlerts: DashboardAlert[] = alerts.map((alert) => ({
+    ...alert,
+    title: longText,
+    evidence: longText,
+    suggestion: longText,
+  }));
+
+  const context = buildAnalysisContext(oversizedSnapshot, oversizedAlerts, {
+    ...filters,
+    storeId: longText,
+    categoryId: longText,
+  });
+  const serialized = JSON.stringify(context);
+
+  expect(serialized.length).toBeLessThan(30000);
+  expect(context.kpis.gmv.value).toBe(125600);
+  expect(context.topContributors.products).toHaveLength(5);
+  expect(context.topContributors.regions).toHaveLength(4);
+  expect(context.alerts).toHaveLength(10);
+  expect(context.forecast7d).toEqual(snapshot.forecast7d);
+  expect(context.topContributors.products.every(({ label }) => label.length > 0)).toBe(true);
+  expect(context.alerts.every(({ title, evidence, suggestion }) => title.length > 0 && evidence.length > 0 && suggestion.length > 0)).toBe(true);
+});

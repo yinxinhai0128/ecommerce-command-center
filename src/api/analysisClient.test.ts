@@ -72,3 +72,17 @@ test.each([
 
   await expect(requestAnalysis(context)).rejects.toThrow(message);
 });
+
+test.each([
+  ['信号包含非有限数值', { ...result, signals: [{ label: 'GMV', value: 'NaN', direction: 'up' }] }],
+  ['信号包含非法方向', { ...result, signals: [{ label: 'GMV', value: 1, direction: 'sideways' }] }],
+  ['归因包含非法贡献值', { ...result, causes: [{ label: '天猫', contribution: '很多', evidence: '渠道增长。' }] }],
+  ['风险包含非法级别', { ...result, risks: [{ severity: 'low', title: '风险', evidence: '证据。' }] }],
+  ['行动包含非法优先级', { ...result, actions: [{ priority: 'urgent', title: '行动', rationale: '原因。' }] }],
+  ['后续问题没有问号', { ...result, followUps: ['查看商品退款'] }],
+  ['生成时间不是ISO时间', { ...result, generatedAt: '明天上午' }],
+])('拒绝%s的嵌套无效分析结果', async (_caseName, invalidResult) => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(invalidResult), { status: 200 })));
+
+  await expect(requestAnalysis(context)).rejects.toThrow('分析结果无效，请重试');
+});

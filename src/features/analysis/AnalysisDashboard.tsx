@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { requestAnalysis } from '../../api/analysisClient';
-import type { AnalysisResult, DashboardAlert, DashboardFilters, DashboardSnapshot } from '../../domain/types';
+import type { AnalysisContext, AnalysisResult, DashboardAlert, DashboardFilters, DashboardSnapshot } from '../../domain/types';
 import { buildAnalysisContext } from '../../metrics/buildAnalysisContext';
 import { ActionList } from './ActionList';
 import { AnalysisChat, type AnalysisHistoryEntry } from './AnalysisChat';
@@ -25,7 +25,9 @@ export function AnalysisDashboard({ snapshot, alerts, filters, active }: Analysi
   const [error, setError] = useState<string>();
   const [stale, setStale] = useState(false);
   const [history, setHistory] = useState<AnalysisHistoryEntry[]>([]);
+  const [analyzedForecast, setAnalyzedForecast] = useState<Pick<AnalysisContext, 'forecast7d' | 'targetProbability'>>();
   const requestedOnce = useRef(false);
+  const nextHistoryId = useRef(0);
   const lastRequestedFingerprint = useRef<string | undefined>(undefined);
   const lastQuestion = useRef<string | undefined>(undefined);
   const controller = useRef<AbortController | undefined>(undefined);
@@ -35,6 +37,7 @@ export function AnalysisDashboard({ snapshot, alerts, filters, active }: Analysi
     const nextController = new AbortController();
     controller.current = nextController;
     const trimmedQuestion = question?.trim() || undefined;
+    const requestedContext = context;
     lastQuestion.current = trimmedQuestion;
     lastRequestedFingerprint.current = contextFingerprint;
     setRequestState('loading');
@@ -44,9 +47,15 @@ export function AnalysisDashboard({ snapshot, alerts, filters, active }: Analysi
       const nextResult = await requestAnalysis(context, trimmedQuestion, nextController.signal);
       if (controller.current !== nextController) return;
       setResult(nextResult);
+      setAnalyzedForecast({
+        forecast7d: requestedContext.forecast7d,
+        targetProbability: requestedContext.targetProbability,
+      });
       setRequestState('success');
       if (trimmedQuestion) {
-        setHistory((current) => [...current, { question: trimmedQuestion, summary: nextResult.summary }].slice(-3));
+        const id = nextHistoryId.current;
+        nextHistoryId.current += 1;
+        setHistory((current) => [...current, { id, question: trimmedQuestion, summary: nextResult.summary }].slice(-3));
       }
     } catch (caught) {
       if (nextController.signal.aborted || (caught instanceof DOMException && caught.name === 'AbortError')) return;
@@ -83,7 +92,7 @@ export function AnalysisDashboard({ snapshot, alerts, filters, active }: Analysi
         <ExecutiveSummary result={result} />
         <div className="analysis-middle">
           <ContributionChart causes={result?.causes} />
-          <ForecastPanel forecast7d={snapshot.forecast7d} targetProbability={snapshot.targetProbability} />
+          <ForecastPanel forecast7d={analyzedForecast?.forecast7d ?? []} targetProbability={analyzedForecast?.targetProbability ?? 0} />
         </div>
         <ActionList actions={result?.actions} />
       </div>

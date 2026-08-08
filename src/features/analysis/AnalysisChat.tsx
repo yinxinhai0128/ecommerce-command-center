@@ -2,7 +2,7 @@ import { useState, type FormEvent, type JSX } from 'react';
 import type { AnalysisResult } from '../../domain/types';
 import { Panel } from '../../ui/Panel';
 
-export type AnalysisHistoryEntry = { question: string; summary: string };
+export type AnalysisHistoryEntry = { id: number; question: string; summary: string };
 
 type AnalysisChatProps = {
   result?: AnalysisResult;
@@ -43,7 +43,7 @@ export function AnalysisChat({ result, loading, history, onQuestion }: AnalysisC
         )}
         <div className="analysis-history" role="log" aria-label="分析对话记录">
           {history.length === 0 ? <p className="panel-empty">提问后仅保留问题与本次结论</p> : history.map((entry) => (
-            <article key={`${entry.question}-${entry.summary}`}>
+            <article key={entry.id}>
               <strong>{entry.question}</strong>
               <p>{entry.summary}</p>
             </article>
