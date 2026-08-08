@@ -2,9 +2,12 @@ import { useState, type JSX } from 'react';
 import { DashboardProvider } from './app/DashboardProvider';
 import { AppHeader, type DashboardTab } from './ui/AppHeader';
 import { GlobalFilters } from './ui/GlobalFilters';
+import { useDashboard } from './app/useDashboard';
+import { RealtimeDashboard } from './features/realtime/RealtimeDashboard';
 
 function DashboardApp(): JSX.Element {
   const [activeTab, setActiveTab] = useState<DashboardTab>('realtime');
+  const { snapshot, alerts, isRunning } = useDashboard();
 
   return (
     <main className="dashboard-app">
@@ -16,7 +19,7 @@ function DashboardApp(): JSX.Element {
         role="tabpanel"
         aria-labelledby="dashboard-tab-realtime"
         hidden={activeTab !== 'realtime'}
-      />
+      ><RealtimeDashboard snapshot={snapshot} alerts={alerts} isRunning={isRunning} /></section>
       <section
         id="dashboard-panel-analysis"
         className="dashboard-content"

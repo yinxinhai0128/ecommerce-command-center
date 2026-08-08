@@ -147,17 +147,25 @@ function buildSalesTrend(dataset: CommerceDataset, filters: DashboardFilters): D
     ? new Date(filters.end.getFullYear(), filters.end.getMonth(), filters.end.getDate(), filters.end.getHours(), Math.floor(filters.end.getMinutes() / 5) * 5)
     : startOfDay(filters.end);
   const gmvByBucket = new Map<number, number>();
+  const orderCountByBucket = new Map<number, number>();
   for (const order of orders) {
     const paidAt = order.paidAt!;
     const bucket = singleDay
       ? new Date(paidAt.getFullYear(), paidAt.getMonth(), paidAt.getDate(), paidAt.getHours(), Math.floor(paidAt.getMinutes() / 5) * 5).getTime()
       : startOfDay(paidAt).getTime();
     gmvByBucket.set(bucket, (gmvByBucket.get(bucket) ?? 0) + orderGmv(order, itemsByOrder.get(order.id) ?? []));
+    orderCountByBucket.set(bucket, (orderCountByBucket.get(bucket) ?? 0) + 1);
   }
   const trend: DashboardSnapshot['salesTrend'] = [];
   for (let at = firstBucket.getTime(); at <= lastBucket.getTime(); at += intervalMs) {
-    trend.push({ at: new Date(at), gmv: gmvByBucket.get(at) ?? 0 });
+    trend.push({ at: new Date(at), gmv: gmvByBucket.get(at) ?? 0, orderCount: orderCountByBucket.get(at) ?? 0, target: 0 });
   }
+  const targetByDate = new Map(dataset.targets
+    .filter((target) => !target.platform && !target.storeId && !target.categoryId && target.date >= dateKey(filters.start) && target.date <= dateKey(filters.end))
+    .map((target) => [target.date, target.gmv]));
+  const bucketCountByDate = new Map<string, number>();
+  for (const point of trend) bucketCountByDate.set(dateKey(point.at), (bucketCountByDate.get(dateKey(point.at)) ?? 0) + 1);
+  for (const point of trend) point.target = (targetByDate.get(dateKey(point.at)) ?? 0) / (bucketCountByDate.get(dateKey(point.at)) ?? 1);
   return trend;
 }
 
@@ -248,6 +256,10 @@ export function calculateSnapshot(dataset: CommerceDataset, filters: DashboardFi
       targetAchievementRate: createKpi(values.targetAchievementRate, comparisonValues.targetAchievementRate),
     },
     salesTrend: buildSalesTrend(dataset, filters),
+    recentOrders: dataset.orders
+      .filter((order) => isInRange(order.createdAt, filters.start, filters.end) && matchesOrderFilters(order, itemsByOrder.get(order.id) ?? [], filters))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((order) => ({ id: order.id, platform: order.platform, amount: orderGmv(order, itemsByOrder.get(order.id) ?? []), status: order.status, at: order.createdAt })),
     funnel: [
       { stage: 'visitors', value: totalTraffic('visitors') },
       { stage: 'productViewers', value: totalTraffic('productViewers') },

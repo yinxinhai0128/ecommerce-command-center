@@ -114,7 +114,8 @@ export type DashboardSnapshot = {
     refundRate: Kpi;
     targetAchievementRate: Kpi;
   };
-  salesTrend: Array<{ at: Date; gmv: number }>;
+  salesTrend: Array<{ at: Date; gmv: number; orderCount: number; target: number }>;
+  recentOrders: Array<{ id: string; platform: Platform; amount: number; status: Order['status']; at: Date }>;
   funnel: Array<{ stage: 'visitors' | 'productViewers' | 'addToCartUsers' | 'checkoutUsers' | 'paidBuyers'; value: number }>;
   channelRanking: Array<{ platform: Platform; gmv: number }>;
   productRanking: Array<{ productId: string; name: string; gmv: number }>;

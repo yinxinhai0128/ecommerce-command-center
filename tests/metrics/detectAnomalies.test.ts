@@ -10,7 +10,8 @@ function snapshot(overrides: Partial<DashboardSnapshot['kpis']> = {}, inventoryR
       averageOrderValue: kpi(100), grossMarginRate: kpi(0.4), refundRate: kpi(0.05), targetAchievementRate: kpi(0.8),
       ...overrides,
     },
-    salesTrend: [{ at: new Date('2026-08-08T12:00:00+08:00'), gmv: 1000 }],
+    salesTrend: [{ at: new Date('2026-08-08T12:00:00+08:00'), gmv: 1000, orderCount: 10, target: 1000 }],
+    recentOrders: [],
     funnel: [], channelRanking: [], productRanking: [], regionRanking: [], inventoryRisks, forecast7d: [], targetProbability: 0,
   };
 }
