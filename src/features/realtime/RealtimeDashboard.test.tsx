@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DashboardAlert, DashboardSnapshot } from '../../domain/types';
@@ -72,6 +72,44 @@ test('展示六项经营KPI且退款率下降使用向好语义色', () => {
   expect(screen.getAllByText(/较昨日同期/)).toHaveLength(6);
 });
 
+test('经营概览呈现五阶段转化漏斗和真实渠道贡献', () => {
+  render(<RealtimeDashboard snapshot={{
+    ...snapshot,
+    funnel: [
+      { stage: 'visitors', value: 1000 },
+      { stage: 'productViewers', value: 700 },
+      { stage: 'addToCartUsers', value: 420 },
+      { stage: 'checkoutUsers', value: 250 },
+      { stage: 'paidBuyers', value: 180 },
+    ],
+    channelRanking: [
+      { platform: '天猫', gmv: 8000 },
+      { platform: '京东', gmv: 2000 },
+    ],
+  }} alerts={alerts} isRunning />);
+
+  const overview = within(screen.getByRole('region', { name: '转化漏斗与渠道贡献' }));
+  expect(overview.getByText('转化漏斗')).toBeInTheDocument();
+  for (const [label, value] of [['访客', '1,000'], ['商品浏览', '700'], ['加购', '420'], ['结算', '250'], ['支付', '180']]) {
+    expect(overview.getByText(label)).toBeInTheDocument();
+    expect(overview.getByText(value)).toBeInTheDocument();
+  }
+  expect(overview.getByText('渠道贡献')).toBeInTheDocument();
+  expect(overview.getByText('天猫')).toBeInTheDocument();
+  expect(overview.getByText('¥8,000')).toBeInTheDocument();
+  expect(overview.getByText('京东')).toBeInTheDocument();
+  expect(overview.getByText('¥2,000')).toBeInTheDocument();
+  expect(overview.getByRole('meter', { name: '天猫渠道贡献' })).toHaveAttribute('aria-valuenow', '8000');
+  expect(overview.getByRole('meter', { name: '天猫渠道贡献' })).toHaveAttribute('aria-valuemax', '10000');
+});
+
+test('漏斗和渠道均无输入时分别显示真实空态', () => {
+  render(<RealtimeDashboard snapshot={snapshot} alerts={alerts} isRunning />);
+
+  const overview = within(screen.getByRole('region', { name: '转化漏斗与渠道贡献' }));
+  expect(overview.getAllByText('当前筛选条件下暂无数据')).toHaveLength(2);
+});
+
 test('分钟经营脉冲输出GMV、订单、目标和异常四条可访问系列', () => {
   render(<RealtimeDashboard snapshot={snapshot} alerts={alerts} isRunning />);
 
@@ -139,7 +177,7 @@ test('点击告警在同一面板展开影响、证据和建议', () => {
 test('拆解区为空时给出真实空态', () => {
   render(<RealtimeDashboard snapshot={{ ...snapshot, productRanking: [], regionRanking: [], inventoryRisks: [] }} alerts={[]} isRunning={false} />);
 
-  expect(screen.getAllByText('当前筛选条件下暂无数据')).toHaveLength(3);
+  expect(within(document.querySelector('.breakdown-panels') as HTMLElement).getAllByText('当前筛选条件下暂无数据')).toHaveLength(3);
   expect(screen.getByText('暂无经营预警')).toBeInTheDocument();
 });
 
