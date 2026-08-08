@@ -12,6 +12,17 @@ test('相同种子与时间生成完全一致且覆盖四个平台', () => {
   expect(a.orders.length).toBeGreaterThan(5000);
 });
 
+test('凌晨生成的今日订单覆盖已发生的多个分钟且不晚于当前时间', () => {
+  const now = new Date('2026-08-08T04:30:00+08:00');
+  const todayOrders = generateDataset(20260808, now).orders.filter((order) => order.createdAt.toDateString() === now.toDateString());
+  const minutes = todayOrders.map((order) => order.createdAt.getHours() * 60 + order.createdAt.getMinutes());
+
+  expect(Math.min(...minutes)).toBeLessThan(60);
+  expect(Math.max(...minutes)).toBeGreaterThanOrEqual(240);
+  expect(Math.max(...minutes)).toBeLessThanOrEqual(270);
+  expect(new Set(minutes).size).toBeGreaterThan(1);
+});
+
 test('订单创建时间连续覆盖 now 当日及此前 89 个自然日', () => {
   const now = new Date('2026-08-08T10:00:00+08:00');
   const dataset = generateDataset(20260808, now);

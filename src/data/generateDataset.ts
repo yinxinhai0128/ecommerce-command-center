@@ -80,7 +80,7 @@ export function generateDataset(seed: number, now: Date): CommerceDataset {
       const shippingFee = Math.floor(random() * 16);
       const discountAmount = Math.floor(random() * Math.min(itemAmount * 0.2, 50));
       const lastMinute = day === 0 ? now.getHours() * 60 + now.getMinutes() : 20 * 60;
-      const firstMinute = Math.min(8 * 60, lastMinute);
+      const firstMinute = day === 0 && lastMinute < 8 * 60 ? 0 : Math.min(8 * 60, lastMinute);
       const createdAt = new Date(dayStart + (firstMinute + Math.floor(random() * (lastMinute - firstMinute + 1))) * 60 * 1000);
       const statusRoll = random();
       const status: Order['status'] = statusRoll < 0.06

@@ -5,6 +5,12 @@ import { Panel } from '../../ui/Panel';
 
 type ForecastPanelProps = Pick<DashboardSnapshot, 'forecast7d' | 'targetProbability'>;
 
+function formatForecastAmount(value: number): string {
+  return value >= 10_000
+    ? `¥${(value / 10_000).toFixed(2)}万`
+    : `¥${value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export function ForecastPanel({ forecast7d, targetProbability }: ForecastPanelProps): JSX.Element {
   const maximum = Math.max(1, ...forecast7d.map((point) => point.gmv));
   return (
@@ -19,7 +25,7 @@ export function ForecastPanel({ forecast7d, targetProbability }: ForecastPanelPr
             {forecast7d.map((point) => (
               <li key={point.date}>
                 <i aria-hidden="true" style={{ height: `${Math.max(8, point.gmv / maximum * 100)}%` }} />
-                <strong>¥{point.gmv.toLocaleString('zh-CN')}</strong>
+                <strong>{formatForecastAmount(point.gmv)}</strong>
                 <time dateTime={point.date}>{point.date.slice(5)}</time>
               </li>
             ))}

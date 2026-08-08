@@ -8,7 +8,8 @@ function timeLabel(at: Date): string {
   return at.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
-export function SalesPulseChart({ salesTrend }: { salesTrend: DashboardSnapshot['salesTrend'] }): JSX.Element {
+export function SalesPulseChart({ salesTrend, hasAnomaly }: { salesTrend: DashboardSnapshot['salesTrend']; hasAnomaly: boolean }): JSX.Element {
+  const latestPoint = salesTrend[salesTrend.length - 1];
   const option = {
     color: [colors.accent, colors.positive, colors.warning, colors.danger],
     tooltip: {
@@ -22,7 +23,7 @@ export function SalesPulseChart({ salesTrend }: { salesTrend: DashboardSnapshot[
       { name: 'GMV', type: 'bar', data: salesTrend.map((point) => point.gmv), itemStyle: { color: colors.accent } },
       { name: '订单', type: 'line', yAxisIndex: 1, data: salesTrend.map((point) => point.orderCount), smooth: true, itemStyle: { color: colors.positive } },
       { name: '目标', type: 'line', data: salesTrend.map((point) => point.target), symbol: 'none', lineStyle: { type: 'dashed', color: colors.warning } },
-      { name: '异常', type: 'scatter', data: salesTrend.map((point, index) => point.gmv > point.target ? [index, point.gmv] : [index, null]), itemStyle: { color: colors.danger } },
+      { name: '异常', type: 'scatter', data: hasAnomaly && latestPoint ? [[salesTrend.length - 1, latestPoint.gmv]] : [], itemStyle: { color: colors.danger } },
     ],
   };
 

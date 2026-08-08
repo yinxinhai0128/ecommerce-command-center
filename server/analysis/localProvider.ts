@@ -38,6 +38,18 @@ export function createLocalAnalysis(
   }
 
   const causes = limit(context.alerts).map(({ title, impactAmount, evidence }) => ({ label: truncate(title), contribution: impactAmount, evidence: truncate(evidence) }));
+  if (causes.length === 0) {
+    const contributors = [
+      context.topContributors.products[0],
+      context.topContributors.channels[0],
+      context.topContributors.regions[0],
+    ].filter((item): item is { label: string; value: number } => item !== undefined);
+    causes.push(...contributors.map((item) => ({
+      label: truncate(item.label),
+      contribution: item.value,
+      evidence: truncate(`${item.label} 当前贡献 ${item.value}`),
+    })));
+  }
   const risks = limit(context.alerts).map(({ severity, title, evidence }) => ({ severity, title: truncate(title), evidence: truncate(evidence) }));
   if (context.alerts.length === 0 && context.targetProbability < 0.8) {
     risks.push({ severity: 'warning', title: '目标达成风险', evidence: `目标达成概率为 ${percentage(context.targetProbability)}%` });

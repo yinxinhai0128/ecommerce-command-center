@@ -137,9 +137,9 @@ describe('智能分析生命周期', () => {
 
     expect(screen.getByText('数据已变化，重新分析')).toBeInTheDocument();
     expect(screen.getByText('72%')).toBeInTheDocument();
-    expect(screen.getByText('¥18,000')).toBeInTheDocument();
+    expect(screen.getByText('¥1.80万')).toBeInTheDocument();
     expect(screen.queryByText('12%')).not.toBeInTheDocument();
-    expect(screen.queryByText('¥99,000')).not.toBeInTheDocument();
+    expect(screen.queryByText('¥9.90万')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '数据已变化，重新分析' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
@@ -148,7 +148,7 @@ describe('智能分析生命周期', () => {
 
     await act(async () => { resolveLatest?.(response()); });
     await waitFor(() => expect(screen.getByText('12%')).toBeInTheDocument());
-    expect(screen.getByText('¥99,000')).toBeInTheDocument();
+    expect(screen.getByText('¥9.90万')).toBeInTheDocument();
     expect(screen.queryByText('72%')).not.toBeInTheDocument();
   });
 
@@ -184,8 +184,8 @@ describe('智能分析内容与问答', () => {
     expect(document.querySelector('[data-direction="positive"]')).toBeInTheDocument();
     expect(document.querySelector('[data-direction="negative"]')).toBeInTheDocument();
     expect(screen.getByText('72%')).toBeInTheDocument();
-    expect(screen.getByText('¥18,000')).toBeInTheDocument();
-    expect(screen.getByText('¥19,500')).toBeInTheDocument();
+    expect(screen.getByText('¥1.80万')).toBeInTheDocument();
+    expect(screen.getByText('¥1.95万')).toBeInTheDocument();
     expect(screen.getByText('本地分析')).toBeInTheDocument();
     expect(screen.queryByText('not_configured')).not.toBeInTheDocument();
     expect(screen.getByText(/生成于/).closest('time')).toHaveAttribute('dateTime', '2026-08-09T00:00:00.000Z');

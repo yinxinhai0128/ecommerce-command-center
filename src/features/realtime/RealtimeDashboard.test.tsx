@@ -132,17 +132,25 @@ test('仅渠道为空时只在渠道显示空态且漏斗保留真实值', () =>
   expect(visitors.getByText('101')).toBeInTheDocument();
 });
 
-test('分钟经营脉冲输出GMV、订单、目标和异常四条可访问系列', () => {
+test('分钟经营脉冲只在有经营预警时为最后一个趋势点标记异常', () => {
   render(<RealtimeDashboard snapshot={snapshot} alerts={alerts} isRunning />);
 
   expect(screen.getByRole('img', { name: '分钟经营脉冲图表' })).toBeInTheDocument();
-  const option = chartOptions[0] as { series: Array<{ name: string; type: string; lineStyle?: { type?: string } }> };
+  const option = chartOptions[0] as { series: Array<{ name: string; type: string; data?: unknown; lineStyle?: { type?: string } }> };
   expect(option.series).toEqual(expect.arrayContaining([
     expect.objectContaining({ name: 'GMV', type: 'bar' }),
     expect.objectContaining({ name: '订单', type: 'line' }),
     expect.objectContaining({ name: '目标', type: 'line', lineStyle: expect.objectContaining({ type: 'dashed' }) }),
     expect.objectContaining({ name: '异常', type: 'scatter' }),
   ]));
+  expect(option.series.find((series) => series.name === '异常')?.data).toEqual([[snapshot.salesTrend.length - 1, snapshot.salesTrend[snapshot.salesTrend.length - 1]?.gmv]]);
+});
+
+test('没有经营预警时分钟经营脉冲不标记异常点', () => {
+  render(<RealtimeDashboard snapshot={snapshot} alerts={[]} isRunning />);
+
+  const option = chartOptions[0] as { series: Array<{ name: string; data?: unknown }> };
+  expect(option.series.find((series) => series.name === '异常')?.data).toEqual([]);
 });
 
 test('最近订单最多八条并呈现输入中的订单字段', () => {
@@ -178,7 +186,7 @@ test('最近订单最多八条并呈现输入中的订单字段', () => {
     const row = screen.getByText(order.id).closest('li')!;
     expect(row).toHaveTextContent(order.platform);
     expect(row).toHaveTextContent(`¥${order.amount.toFixed(2)}`);
-    expect(row).toHaveTextContent(order.status);
+    expect(row.children[3]).toHaveTextContent({ created: '待支付', paid: '已支付', fulfilled: '已完成', cancelled: '已取消' }[order.status]);
     expect(row.querySelector('time')).toHaveAttribute('dateTime', order.at);
   }
   expect(screen.queryByText('overflow-order')).not.toBeInTheDocument();
