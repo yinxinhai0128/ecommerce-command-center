@@ -1,6 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { App } from './App';
 import { Panel } from './ui/Panel';
+
+vi.mock('echarts-for-react', () => ({
+  default: ({ 'aria-label': ariaLabel }: { 'aria-label'?: string }) => <div role="img" aria-label={ariaLabel} />,
+}));
 
 test('默认展示实时监控、运行状态和全局筛选', () => {
   render(<App />);
@@ -98,4 +102,35 @@ test('Panel 错误态提供重试操作', () => {
   expect(screen.getByRole('alert')).toHaveTextContent('加载失败');
   fireEvent.click(screen.getByRole('button', { name: '重试' }));
   expect(retry).toHaveBeenCalledOnce();
+});
+
+test('应用真实装配分析仪表盘且仅在首次激活时请求一次', async () => {
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+    summary: '经营结论已生成。',
+    signals: [{ label: 'GMV', value: 1, direction: 'up' }],
+    causes: [],
+    risks: [],
+    actions: [{ priority: 'high', title: '继续观察', rationale: '保持实时监测。' }],
+    followUps: ['下一步看什么？'],
+    source: 'local',
+    generatedAt: '2026-08-09T00:00:00.000Z',
+  }), { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+
+  const { unmount } = render(<App />);
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(document.getElementById('dashboard-panel-analysis')).toHaveTextContent('今日经营结论');
+
+  fireEvent.click(screen.getByRole('tab', { name: '智能分析' }));
+  await screen.findByText('经营结论已生成。');
+  expect(fetchMock).toHaveBeenCalledOnce();
+
+  fireEvent.click(screen.getByRole('tab', { name: '实时监控' }));
+  fireEvent.click(screen.getByRole('tab', { name: '智能分析' }));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+  expect(document.getElementById('dashboard-panel-realtime')).toHaveAttribute('hidden');
+  expect(document.getElementById('dashboard-panel-analysis')).not.toHaveAttribute('hidden');
+
+  unmount();
+  vi.unstubAllGlobals();
 });

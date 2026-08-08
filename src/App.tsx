@@ -4,10 +4,11 @@ import { AppHeader, type DashboardTab } from './ui/AppHeader';
 import { GlobalFilters } from './ui/GlobalFilters';
 import { useDashboard } from './app/useDashboard';
 import { RealtimeDashboard } from './features/realtime/RealtimeDashboard';
+import { AnalysisDashboard } from './features/analysis/AnalysisDashboard';
 
 function DashboardApp(): JSX.Element {
   const [activeTab, setActiveTab] = useState<DashboardTab>('realtime');
-  const { snapshot, alerts, isRunning } = useDashboard();
+  const { snapshot, alerts, filters, isRunning } = useDashboard();
 
   return (
     <main className="dashboard-app">
@@ -26,7 +27,7 @@ function DashboardApp(): JSX.Element {
         role="tabpanel"
         aria-labelledby="dashboard-tab-analysis"
         hidden={activeTab !== 'analysis'}
-      />
+      ><AnalysisDashboard snapshot={snapshot} alerts={alerts} filters={filters} active={activeTab === 'analysis'} /></section>
     </main>
   );
 }
