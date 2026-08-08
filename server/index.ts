@@ -9,13 +9,12 @@ export function createApp(options: AppOptions = {}): Express {
   const app = express();
   app.use(express.json({ limit: '64kb' }));
   app.use('/api/analysis', createAnalysisRouter(options));
+  app.use('/api', (_req, res) => {
+    res.status(404).json({ error: '未找到 API 路由' });
+  });
 
   app.use(express.static(resolve(process.cwd(), 'dist')));
   app.use((req, res, next) => {
-    if (req.path === '/api' || req.path.startsWith('/api/')) {
-      res.status(404).json({ error: '未找到 API 路由' });
-      return;
-    }
     if (req.method === 'GET') {
       res.sendFile(resolve(process.cwd(), 'dist', 'index.html'));
       return;

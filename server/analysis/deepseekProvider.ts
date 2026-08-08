@@ -16,11 +16,11 @@ export type DeepSeekOutcome =
 
 const modelSchemaDescription = JSON.stringify({
   summary: 'string',
-  signals: [{ title: 'string', evidence: 'string' }],
-  causes: [{ title: 'string', evidence: 'string' }],
-  risks: [{ title: 'string', evidence: 'string' }],
-  actions: [{ title: 'string', rationale: 'string' }],
-  followUps: ['string'],
+  signals: [{ label: 'string', value: 'finite number', direction: 'up | down | flat' }],
+  causes: [{ label: 'string', contribution: 'finite number', evidence: 'string' }],
+  risks: [{ severity: 'critical | warning', title: 'string', evidence: 'string' }],
+  actions: [{ priority: 'high | medium | low', title: 'string', rationale: 'string' }],
+  followUps: ['以 ? 或 ？结尾的可点击问句'],
 });
 
 export async function requestDeepSeekAnalysis(options: DeepSeekOptions): Promise<DeepSeekOutcome> {
@@ -48,7 +48,13 @@ export async function requestDeepSeekAnalysis(options: DeepSeekOptions): Promise
 
     if (!response.ok) return { fallbackReason: 'upstream_error' };
 
-    const content = (await response.json())?.choices?.[0]?.message?.content;
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      return { fallbackReason: 'invalid_response' };
+    }
+    const content = (payload as { choices?: Array<{ message?: { content?: unknown } }> })?.choices?.[0]?.message?.content;
     if (typeof content !== 'string' || content.trim() === '') return { fallbackReason: 'invalid_response' };
 
     const parsed = (() => {

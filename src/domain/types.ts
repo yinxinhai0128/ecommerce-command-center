@@ -156,6 +156,10 @@ export type AnalysisContext = {
   targetProbability: number;
 };
 
+export type AnalysisRequest = AnalysisContext & {
+  question?: string;
+};
+
 export type AnalysisFallbackReason =
   | 'not_configured'
   | 'upstream_error'
@@ -165,10 +169,10 @@ export type AnalysisFallbackReason =
 
 export type AnalysisResult = {
   summary: string;
-  signals: Array<{ title: string; evidence: string }>;
-  causes: Array<{ title: string; evidence: string }>;
-  risks: Array<{ title: string; evidence: string }>;
-  actions: Array<{ title: string; rationale: string }>;
+  signals: Array<{ label: string; value: number; direction: 'up' | 'down' | 'flat' }>;
+  causes: Array<{ label: string; contribution: number; evidence: string }>;
+  risks: Array<{ severity: 'critical' | 'warning'; title: string; evidence: string }>;
+  actions: Array<{ priority: 'high' | 'medium' | 'low'; title: string; rationale: string }>;
   followUps: string[];
   source: 'deepseek' | 'local';
   generatedAt: string;

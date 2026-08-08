@@ -63,3 +63,64 @@ git diff --check
 ```
 
 三项均以退出码 0 完成。构建成功；Vite 仅报告既有客户端 bundle 超过 500KB 的提示，未阻断构建。
+
+## 复审第 1 轮
+
+### 修改
+
+- 新增公共 `AnalysisRequest`，将扁平 POST payload 的可选 `question` 纳入共享契约，并与运行时 schema 双向静态对齐。
+- 将 `AnalysisResult` 固定为 signals、causes、risks、actions 和问句形式 followUps 的精确子结构；同步 DeepSeek 提示、解析与本地生成。
+- 本地生成将数组限制为 12 项、字符串限制为 1,000 字符，保留至少一个数据支撑的 action，并让 follow-up 始终是可点击问句。
+- 将完整 `/api` 命名空间的 JSON 404 前置于静态服务；外层上游响应 JSON 解析失败归类为 `invalid_response`。
+
+### RED
+
+命令：
+
+```powershell
+pnpm exec tsc --noEmit
+pnpm exec vitest run tests/server/analysisRoute.test.ts
+```
+
+关键输出：
+
+```text
+TS2724: has no exported member named 'AnalysisRequest'
+Tests  5 failed | 14 passed (19)
+```
+
+五个失败分别覆盖旧的本地结果字段、旧的 DeepSeek 子结构、外层 JSON 被错标为 `network_error`、13 条合法长告警无法形成合规结果，以及静态文件覆盖 `/api/missing`。
+
+### GREEN
+
+聚焦测试：
+
+```powershell
+pnpm exec vitest run tests/server/analysisRoute.test.ts --reporter=dot
+```
+
+输出：
+
+```text
+Test Files  1 passed (1)
+Tests  19 passed (19)
+```
+
+全量验证：
+
+```powershell
+pnpm test -- --reporter=dot
+pnpm exec tsc --noEmit
+pnpm build
+git diff --check
+```
+
+输出：
+
+```text
+Test Files  9 passed (9)
+Tests  54 passed (54)
+✓ built in 989ms
+```
+
+类型检查与差异检查均以退出码 0 完成。构建仍只有既有客户端 bundle 大小提示。

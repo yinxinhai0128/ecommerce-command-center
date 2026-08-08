@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { AnalysisResult } from '../../src/domain/types';
 import { requestDeepSeekAnalysis, type FetchImplementation } from './deepseekProvider';
 import { createLocalAnalysis } from './localProvider';
-import { analysisContextSchema } from './schema';
+import { analysisRequestSchema } from './schema';
 
 export type AnalysisRouterOptions = {
   fetchImpl?: FetchImplementation;
@@ -17,7 +17,7 @@ export function createAnalysisRouter(options: AnalysisRouterOptions = {}): Route
   const now = options.now ?? (() => new Date());
 
   router.post('/', async (req, res) => {
-    const parsed = analysisContextSchema.safeParse(req.body);
+    const parsed = analysisRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: '请求数据无效' });
       return;

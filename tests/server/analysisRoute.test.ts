@@ -1,9 +1,13 @@
 import request from 'supertest';
 import express from 'express';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createApp } from '../../server/index';
 import { requestDeepSeekAnalysis } from '../../server/analysis/deepseekProvider';
-import type { RequestAnalysisContext } from '../../server/analysis/schema';
+import { analysisResultSchema, type RequestAnalysisContext } from '../../server/analysis/schema';
+import type { AnalysisRequest } from '../../src/domain/types';
 
 const validContext = {
   range: { start: '2026-08-01T00:00:00.000Z', end: '2026-08-07T23:59:59.999Z' },
@@ -34,15 +38,15 @@ const validContext = {
   forecast7d: [{ date: '2026-08-08', gmv: 18000 }],
   targetProbability: 0.65,
   question: '请给出下一步建议',
-};
+} satisfies AnalysisRequest;
 
 const modelResult = {
   summary: '退款率偏高，需要优先排查。',
-  signals: [{ title: '退款率', evidence: '退款率为 8%' }],
-  causes: [{ title: '尺码问题', evidence: '退款预警建议复盘尺码问题' }],
-  risks: [{ title: '目标风险', evidence: '达标概率为 65%' }],
-  actions: [{ title: '复盘尺码', rationale: '退款率 8% 高于对比期 3%' }],
-  followUps: ['跟踪退款率'],
+  signals: [{ label: '退款率', value: 0.08, direction: 'up' as const }],
+  causes: [{ label: '尺码问题', contribution: 9600, evidence: '退款预警建议复盘尺码问题' }],
+  risks: [{ severity: 'warning' as const, title: '目标风险', evidence: '达标概率为 65%' }],
+  actions: [{ priority: 'high' as const, title: '复盘尺码', rationale: '退款率 8% 高于对比期 3%' }],
+  followUps: ['如何降低退款率？'],
 };
 
 function createResponse(body: unknown, status = 200): Response {
@@ -62,6 +66,12 @@ afterEach(() => {
 });
 
 describe('POST /api/analysis', () => {
+  test('公共 AnalysisRequest 契约可表示含 question 的 POST 请求', () => {
+    const analysisRequest: AnalysisRequest = validContext;
+
+    expect(analysisRequest.question).toBe('请给出下一步建议');
+  });
+
   test('导入服务模块不会自动监听端口', async () => {
     const listen = vi.spyOn(express.application, 'listen');
 
@@ -85,11 +95,13 @@ describe('POST /api/analysis', () => {
       generatedAt: '2026-08-09T00:00:00.000Z',
     });
     expect(response.body.summary).toContain('退款率');
-    expect(response.body.signals).toContainEqual({ title: '退款率', evidence: '退款率为 8%' });
+    expect(response.body.signals).toContainEqual({ label: '退款率', value: 0.08, direction: 'up' });
     expect(response.body.actions).toContainEqual({
+      priority: 'high',
       title: '复盘退款原因',
       rationale: '退款率为 8%，预警提示：退款率为 8%。',
     });
+    expect(response.body.followUps.every((followUp: string) => /[？?]$/.test(followUp))).toBe(true);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -102,6 +114,11 @@ describe('POST /api/analysis', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ ...modelResult, source: 'deepseek', generatedAt: '2026-08-09T00:00:00.000Z' });
+    expect(response.body.signals[0]).toEqual({ label: '退款率', value: 0.08, direction: 'up' });
+    expect(response.body.causes[0]).toEqual({ label: '尺码问题', contribution: 9600, evidence: '退款预警建议复盘尺码问题' });
+    expect(response.body.risks[0]).toEqual({ severity: 'warning', title: '目标风险', evidence: '达标概率为 65%' });
+    expect(response.body.actions[0]).toEqual({ priority: 'high', title: '复盘尺码', rationale: '退款率 8% 高于对比期 3%' });
+    expect(response.body.followUps[0]).toMatch(/[？?]$/);
     expect(response.body.fallbackReason).toBeUndefined();
     expect(JSON.stringify(response.body)).not.toContain(apiKey);
     expect(fetchImpl).toHaveBeenCalledWith(
@@ -120,11 +137,17 @@ describe('POST /api/analysis', () => {
     });
     expect(requestBody.messages[0].content).toMatch(/json|schema/i);
     expect(requestBody.messages[1].content).toMatch(/json|schema/i);
+    expect(requestBody.messages[0].content).toContain('"direction"');
+    expect(requestBody.messages[0].content).toContain('"contribution"');
+    expect(requestBody.messages[0].content).toContain('"severity"');
+    expect(requestBody.messages[0].content).toContain('"priority"');
+    expect(requestBody.messages[0].content).toContain('问句');
   });
 
   test.each([
     ['上游非成功状态', () => vi.fn(async () => createResponse({ error: 'bad gateway' }, 502)), 'upstream_error'],
     ['网络异常', () => vi.fn(async () => { throw new Error('offline'); }), 'network_error'],
+    ['上游响应 JSON 无效', () => vi.fn(async () => ({ ok: true, json: async () => { throw new SyntaxError('bad response'); } } as unknown as Response)), 'invalid_response'],
     ['空模型内容', () => createFetchWithContent(''), 'invalid_response'],
     ['非法模型 JSON', () => createFetchWithContent('{not json'), 'invalid_response'],
     ['缺少模型字段', () => createFetchWithContent(JSON.stringify({ summary: '不完整' })), 'invalid_response'],
@@ -166,6 +189,48 @@ describe('POST /api/analysis', () => {
 
     expect(abortedAt).toBe(startedAt + 12_000);
     expect(result).toEqual({ fallbackReason: 'timeout' });
+  });
+
+  test('合法的 13 条长告警仍返回符合结果 schema 的本地分析', async () => {
+    const longText = 'x'.repeat(1_000);
+    const alerts = Array.from({ length: 13 }, (_, index) => ({
+      severity: 'warning' as const,
+      metric: 'refundRate' as const,
+      title: `${index}${longText.slice(0, 1_000 - String(index).length)}`,
+      evidence: 'e',
+      impactAmount: index,
+      suggestion: 's',
+    }));
+    const app = createApp({ env: {}, now: () => new Date('2026-08-09T00:00:00.000Z') });
+
+    const response = await request(app).post('/api/analysis').send({ ...validContext, alerts });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ source: 'local', fallbackReason: 'not_configured' });
+    expect(response.body.actions.length).toBeGreaterThan(0);
+    expect(response.body.signals.length).toBeLessThanOrEqual(12);
+    expect(response.body.causes.length).toBeLessThanOrEqual(12);
+    expect(response.body.risks.length).toBeLessThanOrEqual(12);
+    expect(response.body.followUps.length).toBeLessThanOrEqual(12);
+    expect(analysisResultSchema.safeParse(response.body).success).toBe(true);
+  });
+
+  test('生产静态文件不能覆盖未知 API 的 JSON 404', async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), 'analysis-api-'));
+    const distDirectory = join(tempRoot, 'dist');
+    await mkdir(join(distDirectory, 'api'), { recursive: true });
+    await writeFile(join(distDirectory, 'api', 'missing'), 'static file must not be served');
+    vi.spyOn(process, 'cwd').mockReturnValue(tempRoot);
+
+    try {
+      const response = await request(createApp()).get('/api/missing');
+
+      expect(response.status).toBe(404);
+      expect(response.headers['content-type']).toMatch(/application\/json/);
+      expect(response.body).toEqual({ error: '未找到 API 路由' });
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
   });
 
   test.each([

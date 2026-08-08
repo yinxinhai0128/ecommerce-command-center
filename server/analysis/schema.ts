@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AnalysisContext, AnalysisResult } from '../../src/domain/types';
+import type { AnalysisRequest, AnalysisResult } from '../../src/domain/types';
 
 const text = z.string().trim().min(1).max(1_000);
 const finiteNumber = z.number().finite();
@@ -8,10 +8,17 @@ const kpiSchema = z.object({
   comparisonValue: finiteNumber,
   changeRate: finiteNumber,
 }).strict();
-const insightSchema = z.object({ title: text, evidence: text }).strict();
-const actionSchema = z.object({ title: text, rationale: text }).strict();
+const signalSchema = z.object({
+  label: text,
+  value: finiteNumber,
+  direction: z.enum(['up', 'down', 'flat']),
+}).strict();
+const causeSchema = z.object({ label: text, contribution: finiteNumber, evidence: text }).strict();
+const riskSchema = z.object({ severity: z.enum(['critical', 'warning']), title: text, evidence: text }).strict();
+const actionSchema = z.object({ priority: z.enum(['high', 'medium', 'low']), title: text, rationale: text }).strict();
+const followUpSchema = text.regex(/[？?]$/, '后续问题必须以问号结尾');
 
-export const analysisContextSchema = z.object({
+export const analysisRequestSchema = z.object({
   range: z.object({
     start: z.string().datetime({ offset: true }),
     end: z.string().datetime({ offset: true }),
@@ -53,11 +60,11 @@ export const analysisContextSchema = z.object({
 
 export const modelAnalysisSchema = z.object({
   summary: text,
-  signals: z.array(insightSchema).min(1).max(12),
-  causes: z.array(insightSchema).max(12),
-  risks: z.array(insightSchema).max(12),
+  signals: z.array(signalSchema).min(1).max(12),
+  causes: z.array(causeSchema).max(12),
+  risks: z.array(riskSchema).max(12),
   actions: z.array(actionSchema).min(1).max(12),
-  followUps: z.array(text).min(1).max(12),
+  followUps: z.array(followUpSchema).min(1).max(12),
 }).strict();
 
 export const analysisResultSchema = modelAnalysisSchema.extend({
@@ -66,10 +73,12 @@ export const analysisResultSchema = modelAnalysisSchema.extend({
   fallbackReason: z.enum(['not_configured', 'upstream_error', 'timeout', 'invalid_response', 'network_error']).optional(),
 }).strict();
 
-export type RequestAnalysisContext = z.infer<typeof analysisContextSchema>;
+export type RequestAnalysisContext = z.infer<typeof analysisRequestSchema>;
 export type ModelAnalysis = z.infer<typeof modelAnalysisSchema>;
 
-const _contextContract: AnalysisContext = {} as RequestAnalysisContext;
+const _requestContract: AnalysisRequest = {} as RequestAnalysisContext;
+const _schemaContract: RequestAnalysisContext = {} as AnalysisRequest;
 const _resultContract: AnalysisResult = {} as z.infer<typeof analysisResultSchema>;
-void _contextContract;
+void _requestContract;
+void _schemaContract;
 void _resultContract;
