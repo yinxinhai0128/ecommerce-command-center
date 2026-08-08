@@ -81,6 +81,7 @@ test.each([
   ['行动包含非法优先级', { ...result, actions: [{ priority: 'urgent', title: '行动', rationale: '原因。' }] }],
   ['后续问题没有问号', { ...result, followUps: ['查看商品退款'] }],
   ['生成时间不是ISO时间', { ...result, generatedAt: '明天上午' }],
+  ['生成时间包含不存在的日历日期', { ...result, generatedAt: '2026-02-30T00:00:00Z' }],
 ])('拒绝%s的嵌套无效分析结果', async (_caseName, invalidResult) => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(invalidResult), { status: 200 })));
 
