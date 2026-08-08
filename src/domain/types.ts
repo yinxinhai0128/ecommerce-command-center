@@ -123,3 +123,14 @@ export type DashboardSnapshot = {
   forecast7d: Array<{ date: string; gmv: number }>;
   targetProbability: number;
 };
+
+export type DashboardAlert = {
+  id: string;
+  severity: 'critical' | 'warning';
+  metric: 'refundRate' | 'conversionRate' | 'targetAchievementRate' | 'inventoryDays';
+  title: string;
+  evidence: string;
+  impactAmount: number;
+  suggestion: string;
+  createdAt: Date;
+};
