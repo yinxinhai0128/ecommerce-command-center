@@ -13,6 +13,7 @@ export type Order = {
   customerId: string;
   platform: Platform;
   storeId: string;
+  campaignId?: string;
   createdAt: Date;
   paidAt?: Date;
   status: 'created' | 'paid' | 'fulfilled' | 'cancelled';
@@ -61,7 +62,26 @@ export type Customer = { id: string; name: string };
 export type Store = { id: string; name: string; region: string };
 export type Category = { id: string; name: string };
 
-export type Target = { date: string; gmv: number };
+export type Campaign = {
+  id: string;
+  platform: Platform;
+  storeId: string;
+  channel: '信息流' | '搜索' | '联盟' | '私域';
+  startAt: Date;
+  endAt: Date;
+  impressions: number;
+  clicks: number;
+  spend: number;
+  attributedRevenue: number;
+};
+
+export type Target = {
+  date: string;
+  gmv: number;
+  platform?: Platform;
+  storeId?: string;
+  categoryId?: string;
+};
 
 export type CommerceDataset = {
   orders: Order[];
@@ -73,6 +93,7 @@ export type CommerceDataset = {
   customers: Customer[];
   stores: Store[];
   categories: Category[];
+  campaigns: Campaign[];
 };
 
 export type Kpi = {

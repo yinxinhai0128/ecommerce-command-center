@@ -1,5 +1,6 @@
 import type {
   Category,
+  Campaign,
   CommerceDataset,
   Customer,
   Order,
@@ -42,6 +43,20 @@ export function generateDataset(seed: number, now: Date): CommerceDataset {
     categoryId: categories[index % categories.length].id,
     stock: 20 + Math.floor(random() * 380),
   }));
+  const campaigns: Campaign[] = platforms.flatMap((platform, platformIndex) => (
+    (['信息流', '搜索'] as const).map((channel, channelIndex) => ({
+      id: `campaign-${platformIndex + 1}-${channelIndex + 1}`,
+      platform,
+      storeId: stores[platformIndex].id,
+      channel,
+      startAt: new Date(now.getTime() - (80 - channelIndex * 10) * dayMs),
+      endAt: new Date(now.getTime() + (20 + channelIndex * 10) * dayMs),
+      impressions: 20000 + Math.floor(random() * 30000),
+      clicks: 1000 + Math.floor(random() * 4000),
+      spend: 10000 + Math.floor(random() * 20000),
+      attributedRevenue: 30000 + Math.floor(random() * 50000),
+    }))
+  ));
   const orders: Order[] = [];
   const orderItems: OrderItem[] = [];
   const refunds: Refund[] = [];
@@ -64,7 +79,9 @@ export function generateDataset(seed: number, now: Date): CommerceDataset {
       const itemAmount = quantity * unitPrice;
       const shippingFee = Math.floor(random() * 16);
       const discountAmount = Math.floor(random() * Math.min(itemAmount * 0.2, 50));
-      const createdAt = new Date(dayStart + (8 * 60 + Math.floor(random() * 720)) * 60 * 1000);
+      const lastMinute = day === 0 ? now.getHours() * 60 + now.getMinutes() : 20 * 60;
+      const firstMinute = Math.min(8 * 60, lastMinute);
+      const createdAt = new Date(dayStart + (firstMinute + Math.floor(random() * (lastMinute - firstMinute + 1))) * 60 * 1000);
       const statusRoll = random();
       const status: Order['status'] = statusRoll < 0.06
         ? 'cancelled'
@@ -78,9 +95,10 @@ export function generateDataset(seed: number, now: Date): CommerceDataset {
         customerId: customers[Math.floor(random() * customers.length)].id,
         platform: platforms[platformIndex],
         storeId: stores[platformIndex].id,
+        ...(random() < 0.55 ? { campaignId: campaigns[platformIndex * 2 + Math.floor(random() * 2)].id } : {}),
         createdAt,
         ...(status === 'paid' || status === 'fulfilled'
-          ? { paidAt: new Date(createdAt.getTime() + (5 + Math.floor(random() * 56)) * 60 * 1000) }
+          ? { paidAt: new Date(Math.min(createdAt.getTime() + (5 + Math.floor(random() * 56)) * 60 * 1000, now.getTime())) }
           : {}),
         status,
         shippingFee,
@@ -100,14 +118,17 @@ export function generateDataset(seed: number, now: Date): CommerceDataset {
 
       if ((status === 'paid' || status === 'fulfilled') && random() < 0.08) {
         refundNumber += 1;
-        refunds.push({
-          id: `refund-${refundNumber}`,
-          orderId: order.id,
-          amount: Math.floor((itemAmount + shippingFee - discountAmount) * (0.2 + random() * 0.8)),
-          createdAt: new Date(createdAt.getTime() + (1 + Math.floor(random() * 10)) * dayMs),
-          status: random() < 0.15 ? 'requested' : random() < 0.5 ? 'approved' : 'completed',
-          reason: '商品不符合预期',
-        });
+        const refundAt = new Date(createdAt.getTime() + (1 + Math.floor(random() * 10)) * dayMs);
+        if (refundAt <= now) {
+          refunds.push({
+            id: `refund-${refundNumber}`,
+            orderId: order.id,
+            amount: Math.floor((itemAmount + shippingFee - discountAmount) * (0.2 + random() * 0.8)),
+            createdAt: refundAt,
+            status: random() < 0.15 ? 'requested' : random() < 0.5 ? 'approved' : 'completed',
+            reason: '商品不符合预期',
+          });
+        }
       }
     }
 
@@ -118,7 +139,7 @@ export function generateDataset(seed: number, now: Date): CommerceDataset {
       const checkoutUsers = Math.floor(addToCartUsers * (0.5 + random() * 0.2));
       const paidBuyers = Math.floor(checkoutUsers * (0.55 + random() * 0.2));
       traffic.push({
-        at: new Date(dayStart + 12 * 60 * 60 * 1000),
+        at: new Date(Math.min(dayStart + 12 * 60 * 60 * 1000, now.getTime())),
         platform: platforms[index],
         storeId: stores[index].id,
         categoryId: categories[index % categories.length].id,
@@ -131,7 +152,24 @@ export function generateDataset(seed: number, now: Date): CommerceDataset {
     }
 
     targets.push({ date: dateKey(new Date(dayStart)), gmv: Math.round(dayGmv * (0.9 + random() * 0.2)) });
+    const dimensionIndex = day % platforms.length;
+    targets.push({
+      date: dateKey(new Date(dayStart)),
+      gmv: 5000 + Math.floor(random() * 10000),
+      platform: platforms[dimensionIndex],
+      storeId: stores[dimensionIndex].id,
+      categoryId: categories[dimensionIndex].id,
+    });
   }
 
-  return { orders, orderItems, traffic, refunds, products, targets, customers, stores, categories };
+  for (let day = 1; day <= 7; day += 1) {
+    const date = new Date(startOfDay(now).getTime() + day * dayMs);
+    targets.push({ date: dateKey(date), gmv: 50000 + Math.floor(random() * 20000) });
+  }
+
+  return { orders, orderItems, traffic, refunds, products, targets, customers, stores, categories, campaigns };
+}
+
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }

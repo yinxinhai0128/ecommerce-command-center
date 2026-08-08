@@ -78,9 +78,9 @@ function calculateMetricValues(dataset: CommerceDataset, filters: DashboardFilte
   ), 0);
   const traffic = dataset.traffic.filter((record) => isInRange(record.at, filters.start, filters.end) && matchesTrafficFilters(record, filters));
   const visitors = traffic.reduce((total, record) => total + record.visitors, 0);
-  const paidBuyers = traffic.reduce((total, record) => total + record.paidBuyers, 0);
+  const paidBuyers = new Set(paidOrders.map((order) => order.customerId)).size;
   const target = dataset.targets
-    .filter((entry) => entry.date >= dateKey(filters.start) && entry.date <= dateKey(filters.end))
+    .filter((entry) => !entry.platform && !entry.storeId && !entry.categoryId && entry.date >= dateKey(filters.start) && entry.date <= dateKey(filters.end))
     .reduce((total, entry) => total + entry.gmv, 0);
 
   return {
@@ -225,14 +225,14 @@ export function calculateSnapshot(dataset: CommerceDataset, filters: DashboardFi
   const soldUnits = new Map<string, number>();
   for (const order of dataset.orders) {
     if ((order.status === 'paid' || order.status === 'fulfilled') && order.paidAt && isInRange(order.paidAt, inventoryStart, now)) {
-      for (const item of itemsByOrder.get(order.id) ?? dataset.orderItems.filter((candidate) => candidate.orderId === order.id)) {
+      for (const item of itemsByOrder.get(order.id) ?? []) {
         soldUnits.set(item.productId, (soldUnits.get(item.productId) ?? 0) + item.quantity);
       }
     }
   }
   const forecast7d = calculateForecast(dataset, filters, now);
   const futureTarget = dataset.targets
-    .filter((target) => forecast7d.some((forecast) => forecast.date === target.date))
+    .filter((target) => !target.platform && !target.storeId && !target.categoryId && forecast7d.some((forecast) => forecast.date === target.date))
     .reduce((total, target) => total + target.gmv, 0);
 
   return {
