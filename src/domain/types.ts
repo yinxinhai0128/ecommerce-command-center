@@ -167,13 +167,15 @@ export type AnalysisFallbackReason =
   | 'invalid_response'
   | 'network_error';
 
+export type FollowUpQuestion = `${string}?` | `${string}？`;
+
 export type AnalysisResult = {
   summary: string;
   signals: Array<{ label: string; value: number; direction: 'up' | 'down' | 'flat' }>;
   causes: Array<{ label: string; contribution: number; evidence: string }>;
   risks: Array<{ severity: 'critical' | 'warning'; title: string; evidence: string }>;
   actions: Array<{ priority: 'high' | 'medium' | 'low'; title: string; rationale: string }>;
-  followUps: string[];
+  followUps: FollowUpQuestion[];
   source: 'deepseek' | 'local';
   generatedAt: string;
   fallbackReason?: AnalysisFallbackReason;

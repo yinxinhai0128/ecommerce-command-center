@@ -124,3 +124,62 @@ Tests  54 passed (54)
 ```
 
 类型检查与差异检查均以退出码 0 完成。构建仍只有既有客户端 bundle 大小提示。
+
+## 复审第 2 轮
+
+### 修改
+
+- 新增 `FollowUpQuestion` 公共模板字面量类型，并将 `AnalysisResult.followUps` 收紧为该类型数组；Zod 后续问题 schema 通过 transform 输出同一类型，且保留最小长度与问号校验。
+- 对本地 action rationale 的所有拼接路径统一截断，确保 1,000 字符贡献者标签不会令结果超过响应 schema 上限。
+
+### RED
+
+命令：
+
+```powershell
+pnpm exec tsc --noEmit
+pnpm exec vitest run tests/server/analysisRoute.test.ts --reporter=dot
+```
+
+关键输出：
+
+```text
+TS2305: has no exported member 'FollowUpQuestion'
+Tests  1 failed | 19 passed (20)
+```
+
+失败路由测试提交了合法的 1,000 字符贡献者标签；服务返回 200，但 `analysisResultSchema.safeParse(response.body).success` 为 `false`，证明超长 rationale 会越过公共输出边界。
+
+### GREEN
+
+聚焦测试：
+
+```powershell
+pnpm exec vitest run tests/server/analysisRoute.test.ts --reporter=dot
+```
+
+输出：
+
+```text
+Test Files  1 passed (1)
+Tests  20 passed (20)
+```
+
+全量验证：
+
+```powershell
+pnpm test -- --reporter=dot
+pnpm exec tsc --noEmit
+pnpm build
+git diff --check
+```
+
+输出：
+
+```text
+Test Files  9 passed (9)
+Tests  55 passed (55)
+✓ built in 1.14s
+```
+
+类型检查与差异检查均以退出码 0 完成；构建仍只有既有客户端 bundle 大小提示。

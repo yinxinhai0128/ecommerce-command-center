@@ -1,10 +1,10 @@
-import type { AnalysisFallbackReason, AnalysisResult } from '../../src/domain/types';
+import type { AnalysisFallbackReason, AnalysisResult, FollowUpQuestion } from '../../src/domain/types';
 import type { RequestAnalysisContext } from './schema';
 
 const percentage = (value: number) => String(Math.round(value * 1_000) / 10);
 const limit = <T>(items: T[]) => items.slice(0, 12);
 const truncate = (value: string) => value.trim().slice(0, 1_000);
-const question = (value: string) => `${truncate(value).slice(0, 999).replace(/[？?]+$/, '')}？`;
+const question = (value: string): FollowUpQuestion => `${truncate(value).slice(0, 999).replace(/[？?]+$/, '')}？` as FollowUpQuestion;
 const direction = (value: number): 'up' | 'down' | 'flat' => value > 0 ? 'up' : value < 0 ? 'down' : 'flat';
 
 const metricTitle = (metric: RequestAnalysisContext['alerts'][number]['metric']) => ({
@@ -50,8 +50,8 @@ export function createLocalAnalysis(
   const actions = refundAlert
     ? [{ priority: 'high' as const, title: '复盘退款原因', rationale: truncate(`${refundEvidence}，预警提示：${refundAlert.evidence}。`) }]
     : context.targetProbability < 0.8
-      ? [{ priority: 'high' as const, title: '提升目标达成', rationale: `目标达成概率为 ${percentage(context.targetProbability)}%，需跟进未来 7 天预测。` }]
-      : [{ priority: 'medium' as const, title: '跟进主要贡献项', rationale: contributor ? `${contributor.label}当前贡献 ${contributor.value}，应持续跟踪。` : `GMV为 ${context.kpis.gmv.value}，应持续跟踪。` }];
+      ? [{ priority: 'high' as const, title: '提升目标达成', rationale: truncate(`目标达成概率为 ${percentage(context.targetProbability)}%，需跟进未来 7 天预测。`) }]
+      : [{ priority: 'medium' as const, title: '跟进主要贡献项', rationale: truncate(contributor ? `${contributor.label}当前贡献 ${contributor.value}，应持续跟踪。` : `GMV为 ${context.kpis.gmv.value}，应持续跟踪。`) }];
 
   return {
     summary: truncate(context.alerts.length > 0
@@ -61,7 +61,7 @@ export function createLocalAnalysis(
     causes,
     risks,
     actions,
-    followUps: context.alerts.length > 0 ? limit(context.alerts).map((alert) => question(`如何执行${alert.suggestion}`)) : ['如何跟进未来 7 天 GMV 预测？'],
+    followUps: context.alerts.length > 0 ? limit(context.alerts).map((alert) => question(`如何执行${alert.suggestion}`)) : [question('如何跟进未来 7 天 GMV 预测')],
     source: 'local',
     generatedAt: now().toISOString(),
     fallbackReason,

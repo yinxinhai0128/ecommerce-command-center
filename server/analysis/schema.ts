@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AnalysisRequest, AnalysisResult } from '../../src/domain/types';
+import type { AnalysisRequest, AnalysisResult, FollowUpQuestion } from '../../src/domain/types';
 
 const text = z.string().trim().min(1).max(1_000);
 const finiteNumber = z.number().finite();
@@ -16,7 +16,7 @@ const signalSchema = z.object({
 const causeSchema = z.object({ label: text, contribution: finiteNumber, evidence: text }).strict();
 const riskSchema = z.object({ severity: z.enum(['critical', 'warning']), title: text, evidence: text }).strict();
 const actionSchema = z.object({ priority: z.enum(['high', 'medium', 'low']), title: text, rationale: text }).strict();
-const followUpSchema = text.regex(/[？?]$/, '后续问题必须以问号结尾');
+const followUpSchema = text.regex(/[？?]$/, '后续问题必须以问号结尾').transform((value) => value as FollowUpQuestion);
 
 export const analysisRequestSchema = z.object({
   range: z.object({

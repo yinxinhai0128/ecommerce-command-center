@@ -7,7 +7,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createApp } from '../../server/index';
 import { requestDeepSeekAnalysis } from '../../server/analysis/deepseekProvider';
 import { analysisResultSchema, type RequestAnalysisContext } from '../../server/analysis/schema';
-import type { AnalysisRequest } from '../../src/domain/types';
+import type { AnalysisRequest, FollowUpQuestion } from '../../src/domain/types';
 
 const validContext = {
   range: { start: '2026-08-01T00:00:00.000Z', end: '2026-08-07T23:59:59.999Z' },
@@ -39,6 +39,12 @@ const validContext = {
   targetProbability: 0.65,
   question: '请给出下一步建议',
 } satisfies AnalysisRequest;
+
+const publicFollowUp: FollowUpQuestion = '如何降低退款率？';
+// @ts-expect-error 空字符串不能作为可点击问句。
+const emptyFollowUp: FollowUpQuestion = '';
+void publicFollowUp;
+void emptyFollowUp;
 
 const modelResult = {
   summary: '退款率偏高，需要优先排查。',
@@ -212,6 +218,25 @@ describe('POST /api/analysis', () => {
     expect(response.body.causes.length).toBeLessThanOrEqual(12);
     expect(response.body.risks.length).toBeLessThanOrEqual(12);
     expect(response.body.followUps.length).toBeLessThanOrEqual(12);
+    expect(analysisResultSchema.safeParse(response.body).success).toBe(true);
+  });
+
+  test('1000 字符贡献者标签仍返回符合结果 schema 的本地分析', async () => {
+    const app = createApp({ env: {} });
+    const response = await request(app).post('/api/analysis').send({
+      ...validContext,
+      alerts: [],
+      targetProbability: 0.9,
+      topContributors: {
+        channels: [],
+        products: [{ label: 'x'.repeat(1_000), value: 45_000 }],
+        regions: [],
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ source: 'local', fallbackReason: 'not_configured' });
+    expect(response.body.actions.length).toBeGreaterThan(0);
     expect(analysisResultSchema.safeParse(response.body).success).toBe(true);
   });
 
