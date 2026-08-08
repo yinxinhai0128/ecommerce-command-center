@@ -115,11 +115,24 @@ export function applyEvent(dataset: CommerceDataset, event: CommerceEvent): Comm
     };
   }
   if (event.type === 'payment') {
+    const order = dataset.orders.find((candidate) => candidate.id === event.orderId);
+    if (order?.status !== 'created') return dataset;
     return {
       ...dataset,
       orders: dataset.orders.map((order) => order.id === event.orderId ? { ...order, status: 'paid', paidAt: event.paidAt } : order),
     };
   }
-  if (event.type === 'refund') return { ...dataset, refunds: [...dataset.refunds, event.refund] };
+  if (event.type === 'refund') {
+    const order = dataset.orders.find((candidate) => candidate.id === event.refund.orderId);
+    const refundedAmount = dataset.refunds
+      .filter((refund) => refund.orderId === event.refund.orderId)
+      .reduce((total, refund) => total + refund.amount, 0);
+    if (
+      (order?.status !== 'paid' && order?.status !== 'fulfilled')
+      || event.refund.amount <= 0
+      || refundedAmount + event.refund.amount > orderAmount(dataset, event.refund.orderId)
+    ) return dataset;
+    return { ...dataset, refunds: [...dataset.refunds, event.refund] };
+  }
   return { ...dataset, products: updateProduct(dataset.products, event.productId, event.stockDelta) };
 }

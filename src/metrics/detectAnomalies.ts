@@ -13,7 +13,7 @@ export function detectAnomalies(snapshot: DashboardSnapshot): DashboardAlert[] {
   const alerts: DashboardAlert[] = [];
   const { kpis } = snapshot;
 
-  if (kpis.refundRate.changeRate > 0.3 && kpis.refundRate.value > 0.08) {
+  if (kpis.refundRate.changeRate >= 0.3 && kpis.refundRate.value > 0.08) {
     alerts.push({
       id: `refundRate-${createdAt.getTime()}`,
       severity: 'critical',

@@ -1,4 +1,4 @@
-import { applyEvent, createNextEvent } from '../../src/data/eventSimulator';
+import { applyEvent, createNextEvent, type CommerceEvent } from '../../src/data/eventSimulator';
 import { calculateSnapshot } from '../../src/metrics/calculateMetrics';
 import type { CommerceDataset, DashboardFilters } from '../../src/domain/types';
 
@@ -52,4 +52,65 @@ test('事件具有确定性、唯一 ID，且应用后保持领域约束', () =>
       + (order?.shippingFee ?? 0) - (order?.discountAmount ?? 0);
     return (order?.status === 'paid' || order?.status === 'fulfilled') && refund.amount <= paidAmount;
   })).toBe(true);
+});
+
+test('订单和库存事件应用后更新对应 ID 与库存', () => {
+  const orderEvent: CommerceEvent = {
+    id: 'event-order-2',
+    type: 'order',
+    order: {
+      ...dataset.orders[0],
+      id: 'order-2',
+      status: 'paid',
+      paidAt: now,
+    },
+    item: { ...dataset.orderItems[0], orderId: 'order-2', quantity: 2 },
+    productId: 'product-1',
+    stockDelta: -2,
+  };
+  const inventoryEvent: CommerceEvent = { id: 'event-inventory-1', type: 'inventory', productId: 'product-1', stockDelta: 5 };
+
+  const afterOrder = applyEvent(dataset, orderEvent);
+  const afterInventory = applyEvent(afterOrder, inventoryEvent);
+
+  expect(afterOrder.orders[afterOrder.orders.length - 1]?.id).toBe('order-2');
+  expect(afterOrder.orderItems[afterOrder.orderItems.length - 1]?.orderId).toBe('order-2');
+  expect(afterOrder.products[0].stock).toBe(8);
+  expect(afterInventory.products[0].stock).toBe(13);
+});
+
+test('支付事件仅将 created 订单变为 paid，其他状态不改变数据集', () => {
+  const payment: CommerceEvent = { id: 'event-payment-1', type: 'payment', orderId: 'order-1', paidAt: now };
+  const paid = applyEvent(dataset, payment);
+  const fulfilledDataset: CommerceDataset = {
+    ...dataset,
+    orders: [{ ...dataset.orders[0], status: 'fulfilled', paidAt: now }],
+  };
+
+  expect(paid.orders[0]).toMatchObject({ id: 'order-1', status: 'paid', paidAt: now });
+  expect(applyEvent(fulfilledDataset, payment)).toBe(fulfilledDataset);
+});
+
+test('退款事件仅接受已支付订单，且累计退款不能超过实付金额', () => {
+  const paidDataset: CommerceDataset = {
+    ...dataset,
+    orders: [{ ...dataset.orders[0], status: 'paid', paidAt: now }],
+    refunds: [{ id: 'refund-existing', orderId: 'order-1', amount: 20, createdAt: now, status: 'requested', reason: '首次申请' }],
+  };
+  const validRefund: CommerceEvent = {
+    id: 'event-refund-1', type: 'refund',
+    refund: { id: 'refund-valid', orderId: 'order-1', amount: 30, createdAt: now, status: 'approved', reason: '补偿' },
+  };
+  const excessiveRefund: CommerceEvent = {
+    id: 'event-refund-2', type: 'refund',
+    refund: { id: 'refund-excessive', orderId: 'order-1', amount: 81, createdAt: now, status: 'completed', reason: '超额' },
+  };
+  const createdDataset: CommerceDataset = { ...paidDataset, orders: [{ ...dataset.orders[0], status: 'created' }] };
+
+  const next = applyEvent(paidDataset, validRefund);
+
+  expect(next.refunds.map((refund) => refund.id)).toEqual(['refund-existing', 'refund-valid']);
+  expect(next.refunds.reduce((total, refund) => total + refund.amount, 0)).toBe(50);
+  expect(applyEvent(paidDataset, excessiveRefund)).toBe(paidDataset);
+  expect(applyEvent(createdDataset, validRefund)).toBe(createdDataset);
 });

@@ -15,8 +15,8 @@ function snapshot(overrides: Partial<DashboardSnapshot['kpis']> = {}, inventoryR
   };
 }
 
-test('退款率较昨日增长超过 30% 且绝对值超过 8% 时生成严重告警', () => {
-  const alerts = detectAnomalies(snapshot({ refundRate: { value: 0.09, comparisonValue: 0.06, changeRate: 0.5 } }));
+test('退款率较昨日增长达到 30% 且绝对值超过 8% 时生成严重告警', () => {
+  const alerts = detectAnomalies(snapshot({ refundRate: { value: 0.09, comparisonValue: 0.06, changeRate: 0.3 } }));
 
   expect(alerts).toContainEqual(expect.objectContaining({ severity: 'critical', metric: 'refundRate' }));
 });
