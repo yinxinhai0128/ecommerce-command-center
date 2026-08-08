@@ -6,6 +6,7 @@ import type {
   Order,
   OrderItem,
   Platform,
+  Target,
   TrafficRecord,
 } from '../domain/types';
 
@@ -27,7 +28,11 @@ function isInRange(date: Date, start: Date, end: Date): boolean {
 function matchesOrderFilters(order: Order, items: OrderItem[], filters: DashboardFilters): boolean {
   return (!filters.platform || order.platform === filters.platform)
     && (!filters.storeId || order.storeId === filters.storeId)
-    && (!filters.categoryId || items.some((item) => item.categoryId === filters.categoryId));
+    && (!filters.categoryId || filteredOrderItems(items, filters).length > 0);
+}
+
+function filteredOrderItems(items: OrderItem[], filters: DashboardFilters): OrderItem[] {
+  return filters.categoryId ? items.filter((item) => item.categoryId === filters.categoryId) : items;
 }
 
 function matchesTrafficFilters(record: TrafficRecord, filters: DashboardFilters): boolean {
@@ -42,6 +47,32 @@ function itemAmount(items: OrderItem[]): number {
 
 function orderGmv(order: Order, items: OrderItem[]): number {
   return itemAmount(items) + order.shippingFee - order.discountAmount;
+}
+
+function allocationRatio(items: OrderItem[], filters: DashboardFilters): number {
+  if (!filters.categoryId) return 1;
+  const gross = itemAmount(items);
+  return gross === 0 ? 0 : itemAmount(filteredOrderItems(items, filters)) / gross;
+}
+
+function allocatedOrderGmv(order: Order, items: OrderItem[], filters: DashboardFilters): number {
+  const ratio = allocationRatio(items, filters);
+  return itemAmount(filteredOrderItems(items, filters)) + (order.shippingFee - order.discountAmount) * ratio;
+}
+
+function matchesTargetFilters(target: Target, filters: DashboardFilters): boolean {
+  const hasDimensionFilter = Boolean(filters.platform || filters.storeId || filters.categoryId);
+  if (!hasDimensionFilter) return !target.platform && !target.storeId && !target.categoryId;
+  return target.platform !== undefined
+    && target.storeId !== undefined
+    && target.categoryId !== undefined
+    && (!filters.platform || target.platform === filters.platform)
+    && (!filters.storeId || target.storeId === filters.storeId)
+    && (!filters.categoryId || target.categoryId === filters.categoryId);
+}
+
+function selectTargets(dataset: CommerceDataset, filters: DashboardFilters): Target[] {
+  return dataset.targets.filter((target) => matchesTargetFilters(target, filters));
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -62,7 +93,7 @@ function calculateMetricValues(dataset: CommerceDataset, filters: DashboardFilte
     && isInRange(order.paidAt, filters.start, filters.end)
     && matchesOrderFilters(order, itemsByOrder.get(order.id) ?? [], filters)
   ));
-  const gmv = paidOrders.reduce((total, order) => total + orderGmv(order, itemsByOrder.get(order.id) ?? []), 0);
+  const gmv = paidOrders.reduce((total, order) => total + allocatedOrderGmv(order, itemsByOrder.get(order.id) ?? [], filters), 0);
   const refundAmount = dataset.refunds
     .filter((refund) => {
       const order = ordersById.get(refund.orderId);
@@ -71,16 +102,19 @@ function calculateMetricValues(dataset: CommerceDataset, filters: DashboardFilte
         && order !== undefined
         && matchesOrderFilters(order, itemsByOrder.get(order.id) ?? [], filters);
     })
-    .reduce((total, refund) => total + refund.amount, 0);
+    .reduce((total, refund) => {
+      const order = ordersById.get(refund.orderId)!;
+      return total + refund.amount * allocationRatio(itemsByOrder.get(order.id) ?? [], filters);
+    }, 0);
   const netSales = gmv - refundAmount;
   const cost = paidOrders.reduce((total, order) => (
-    total + (itemsByOrder.get(order.id) ?? []).reduce((itemTotal, item) => itemTotal + item.quantity * item.unitCost, 0)
+    total + filteredOrderItems(itemsByOrder.get(order.id) ?? [], filters).reduce((itemTotal, item) => itemTotal + item.quantity * item.unitCost, 0)
   ), 0);
   const traffic = dataset.traffic.filter((record) => isInRange(record.at, filters.start, filters.end) && matchesTrafficFilters(record, filters));
   const visitors = traffic.reduce((total, record) => total + record.visitors, 0);
   const paidBuyers = new Set(paidOrders.map((order) => order.customerId)).size;
-  const target = dataset.targets
-    .filter((entry) => !entry.platform && !entry.storeId && !entry.categoryId && entry.date >= dateKey(filters.start) && entry.date <= dateKey(filters.end))
+  const target = selectTargets(dataset, filters)
+    .filter((entry) => entry.date >= dateKey(filters.start) && entry.date <= dateKey(filters.end))
     .reduce((total, entry) => total + entry.gmv, 0);
 
   return {
@@ -153,16 +187,19 @@ function buildSalesTrend(dataset: CommerceDataset, filters: DashboardFilters): D
     const bucket = singleDay
       ? new Date(paidAt.getFullYear(), paidAt.getMonth(), paidAt.getDate(), paidAt.getHours(), Math.floor(paidAt.getMinutes() / 5) * 5).getTime()
       : startOfDay(paidAt).getTime();
-    gmvByBucket.set(bucket, (gmvByBucket.get(bucket) ?? 0) + orderGmv(order, itemsByOrder.get(order.id) ?? []));
+    gmvByBucket.set(bucket, (gmvByBucket.get(bucket) ?? 0) + allocatedOrderGmv(order, itemsByOrder.get(order.id) ?? [], filters));
     orderCountByBucket.set(bucket, (orderCountByBucket.get(bucket) ?? 0) + 1);
   }
   const trend: DashboardSnapshot['salesTrend'] = [];
   for (let at = firstBucket.getTime(); at <= lastBucket.getTime(); at += intervalMs) {
     trend.push({ at: new Date(at), gmv: gmvByBucket.get(at) ?? 0, orderCount: orderCountByBucket.get(at) ?? 0, target: 0 });
   }
-  const targetByDate = new Map(dataset.targets
-    .filter((target) => !target.platform && !target.storeId && !target.categoryId && target.date >= dateKey(filters.start) && target.date <= dateKey(filters.end))
-    .map((target) => [target.date, target.gmv]));
+  const targetByDate = new Map<string, number>();
+  for (const target of selectTargets(dataset, filters)) {
+    if (target.date >= dateKey(filters.start) && target.date <= dateKey(filters.end)) {
+      targetByDate.set(target.date, (targetByDate.get(target.date) ?? 0) + target.gmv);
+    }
+  }
   const bucketCountByDate = new Map<string, number>();
   for (const point of trend) bucketCountByDate.set(dateKey(point.at), (bucketCountByDate.get(dateKey(point.at)) ?? 0) + 1);
   for (const point of trend) point.target = (targetByDate.get(dateKey(point.at)) ?? 0) / (bucketCountByDate.get(dateKey(point.at)) ?? 1);
@@ -175,7 +212,7 @@ function calculateForecast(dataset: CommerceDataset, filters: DashboardFilters, 
   const { orders, itemsByOrder } = selectPaidOrders(dataset, historicalFilters);
   for (const order of orders) {
     const key = dateKey(order.paidAt!);
-    dailyGmv.set(key, (dailyGmv.get(key) ?? 0) + orderGmv(order, itemsByOrder.get(order.id) ?? []));
+    dailyGmv.set(key, (dailyGmv.get(key) ?? 0) + allocatedOrderGmv(order, itemsByOrder.get(order.id) ?? [], filters));
   }
   const recentStart = new Date(now.getTime() - 7 * dayMs);
   const previousStart = new Date(now.getTime() - 14 * dayMs);
@@ -220,11 +257,12 @@ export function calculateSnapshot(dataset: CommerceDataset, filters: DashboardFi
   const storesById = new Map(dataset.stores.map((store) => [store.id, store]));
   const productsById = new Map(dataset.products.map((product) => [product.id, product]));
   for (const order of orders) {
-    const amount = orderGmv(order, itemsByOrder.get(order.id) ?? []);
+    const items = itemsByOrder.get(order.id) ?? [];
+    const amount = allocatedOrderGmv(order, items, filters);
     gmvByPlatform.set(order.platform, (gmvByPlatform.get(order.platform) ?? 0) + amount);
     const region = storesById.get(order.storeId)?.region ?? '未知';
     gmvByRegion.set(region, (gmvByRegion.get(region) ?? 0) + amount);
-    for (const item of itemsByOrder.get(order.id) ?? []) {
+    for (const item of filteredOrderItems(items, filters)) {
       const productAmount = item.quantity * item.unitPrice;
       gmvByProduct.set(item.productId, (gmvByProduct.get(item.productId) ?? 0) + productAmount);
     }
@@ -232,15 +270,21 @@ export function calculateSnapshot(dataset: CommerceDataset, filters: DashboardFi
   const inventoryStart = new Date(now.getTime() - 7 * dayMs);
   const soldUnits = new Map<string, number>();
   for (const order of dataset.orders) {
-    if ((order.status === 'paid' || order.status === 'fulfilled') && order.paidAt && isInRange(order.paidAt, inventoryStart, now)) {
-      for (const item of itemsByOrder.get(order.id) ?? []) {
+    const items = itemsByOrder.get(order.id) ?? [];
+    if (
+      (order.status === 'paid' || order.status === 'fulfilled')
+      && order.paidAt
+      && isInRange(order.paidAt, inventoryStart, now)
+      && matchesOrderFilters(order, items, filters)
+    ) {
+      for (const item of filteredOrderItems(items, filters)) {
         soldUnits.set(item.productId, (soldUnits.get(item.productId) ?? 0) + item.quantity);
       }
     }
   }
   const forecast7d = calculateForecast(dataset, filters, now);
-  const futureTarget = dataset.targets
-    .filter((target) => !target.platform && !target.storeId && !target.categoryId && forecast7d.some((forecast) => forecast.date === target.date))
+  const futureTarget = selectTargets(dataset, filters)
+    .filter((target) => forecast7d.some((forecast) => forecast.date === target.date))
     .reduce((total, target) => total + target.gmv, 0);
 
   return {
@@ -259,7 +303,7 @@ export function calculateSnapshot(dataset: CommerceDataset, filters: DashboardFi
     recentOrders: dataset.orders
       .filter((order) => isInRange(order.createdAt, filters.start, filters.end) && matchesOrderFilters(order, itemsByOrder.get(order.id) ?? [], filters))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map((order) => ({ id: order.id, platform: order.platform, amount: orderGmv(order, itemsByOrder.get(order.id) ?? []), status: order.status, at: order.createdAt })),
+      .map((order) => ({ id: order.id, platform: order.platform, amount: allocatedOrderGmv(order, itemsByOrder.get(order.id) ?? [], filters), status: order.status, at: order.createdAt })),
     funnel: [
       { stage: 'visitors', value: totalTraffic('visitors') },
       { stage: 'productViewers', value: totalTraffic('productViewers') },
@@ -277,6 +321,7 @@ export function calculateSnapshot(dataset: CommerceDataset, filters: DashboardFi
       .map(([region, gmv]) => ({ region, gmv }))
       .sort((a, b) => b.gmv - a.gmv),
     inventoryRisks: dataset.products
+      .filter((product) => !filters.categoryId || product.categoryId === filters.categoryId)
       .map((product) => {
         const dailySales = (soldUnits.get(product.id) ?? 0) / 7;
         return { productId: product.id, name: product.name, stock: product.stock, dailySales, daysAvailable: dailySales === 0 ? Infinity : product.stock / dailySales };

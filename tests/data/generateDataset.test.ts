@@ -91,6 +91,17 @@ test('生成的数据保持订单金额、引用和库存一致性', () => {
     && (!target.categoryId || categoryIds.has(target.categoryId))
   ))).toBe(true);
   expect(dataset.targets.some((target) => target.platform && target.storeId && target.categoryId)).toBe(true);
+  const targetDates = [...new Set(dataset.targets.map((target) => target.date))];
+  for (const date of targetDates) {
+    const targets = dataset.targets.filter((target) => target.date === date);
+    const total = targets.find((target) => !target.platform && !target.storeId && !target.categoryId);
+    const atomic = targets.filter((target) => target.platform && target.storeId && target.categoryId);
+
+    expect(total).toBeDefined();
+    expect(atomic).toHaveLength(24);
+    expect(new Set(atomic.map((target) => `${target.platform}/${target.storeId}/${target.categoryId}`)).size).toBe(24);
+    expect(atomic.reduce((sum, target) => sum + target.gmv, 0)).toBe(total?.gmv);
+  }
   expect(dataset.targets.filter((target) => !target.platform && !target.storeId && !target.categoryId && target.date > '2026-08-08')).toHaveLength(7);
 
   const factDates = [

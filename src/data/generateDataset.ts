@@ -151,20 +151,12 @@ export function generateDataset(seed: number, now: Date): CommerceDataset {
       });
     }
 
-    targets.push({ date: dateKey(new Date(dayStart)), gmv: Math.round(dayGmv * (0.9 + random() * 0.2)) });
-    const dimensionIndex = day % platforms.length;
-    targets.push({
-      date: dateKey(new Date(dayStart)),
-      gmv: 5000 + Math.floor(random() * 10000),
-      platform: platforms[dimensionIndex],
-      storeId: stores[dimensionIndex].id,
-      categoryId: categories[dimensionIndex].id,
-    });
+    addTargets(targets, dateKey(new Date(dayStart)), Math.round(dayGmv * (0.9 + random() * 0.2)), platforms, stores, categories);
   }
 
   for (let day = 1; day <= 7; day += 1) {
     const date = new Date(startOfDay(now).getTime() + day * dayMs);
-    targets.push({ date: dateKey(date), gmv: 50000 + Math.floor(random() * 20000) });
+    addTargets(targets, dateKey(date), 50000 + Math.floor(random() * 20000), platforms, stores, categories);
   }
 
   return { orders, orderItems, traffic, refunds, products, targets, customers, stores, categories, campaigns };
@@ -172,4 +164,19 @@ export function generateDataset(seed: number, now: Date): CommerceDataset {
 
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function addTargets(targets: Target[], date: string, totalGmv: number, platforms: Platform[], stores: Store[], categories: Category[]): void {
+  targets.push({ date, gmv: totalGmv });
+  const combinations = platforms.flatMap((platform, platformIndex) => (
+    categories.map((category) => ({ platform, storeId: stores[platformIndex]!.id, categoryId: category.id }))
+  ));
+  const baseGmv = Math.floor(totalGmv / combinations.length);
+  combinations.forEach((combination, index) => {
+    targets.push({
+      date,
+      gmv: index === combinations.length - 1 ? totalGmv - baseGmv * index : baseGmv,
+      ...combination,
+    });
+  });
 }
