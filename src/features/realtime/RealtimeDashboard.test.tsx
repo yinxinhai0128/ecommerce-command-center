@@ -76,11 +76,11 @@ test('经营概览呈现五阶段转化漏斗和真实渠道贡献', () => {
   render(<RealtimeDashboard snapshot={{
     ...snapshot,
     funnel: [
-      { stage: 'visitors', value: 1000 },
-      { stage: 'productViewers', value: 700 },
-      { stage: 'addToCartUsers', value: 420 },
-      { stage: 'checkoutUsers', value: 250 },
-      { stage: 'paidBuyers', value: 180 },
+      { stage: 'visitors', value: 101 },
+      { stage: 'productViewers', value: 82 },
+      { stage: 'addToCartUsers', value: 53 },
+      { stage: 'checkoutUsers', value: 31 },
+      { stage: 'paidBuyers', value: 19 },
     ],
     channelRanking: [
       { platform: '天猫', gmv: 8000 },
@@ -89,25 +89,47 @@ test('经营概览呈现五阶段转化漏斗和真实渠道贡献', () => {
   }} alerts={alerts} isRunning />);
 
   const overview = within(screen.getByRole('region', { name: '转化漏斗与渠道贡献' }));
-  expect(overview.getByText('转化漏斗')).toBeInTheDocument();
-  for (const [label, value] of [['访客', '1,000'], ['商品浏览', '700'], ['加购', '420'], ['结算', '250'], ['支付', '180']]) {
-    expect(overview.getByText(label)).toBeInTheDocument();
-    expect(overview.getByText(value)).toBeInTheDocument();
+  const funnel = within(overview.getByRole('region', { name: '转化漏斗' }));
+  for (const [label, value] of [['访客', '101'], ['商品浏览', '82'], ['加购', '53'], ['结算', '31'], ['支付', '19']]) {
+    const item = within(funnel.getByText(label).closest('li')!);
+    expect(item.getByText(label)).toBeInTheDocument();
+    expect(item.getByText(value)).toBeInTheDocument();
   }
-  expect(overview.getByText('渠道贡献')).toBeInTheDocument();
-  expect(overview.getByText('天猫')).toBeInTheDocument();
-  expect(overview.getByText('¥8,000')).toBeInTheDocument();
-  expect(overview.getByText('京东')).toBeInTheDocument();
-  expect(overview.getByText('¥2,000')).toBeInTheDocument();
-  expect(overview.getByRole('meter', { name: '天猫渠道贡献' })).toHaveAttribute('aria-valuenow', '8000');
-  expect(overview.getByRole('meter', { name: '天猫渠道贡献' })).toHaveAttribute('aria-valuemax', '10000');
+  const channels = within(overview.getByRole('region', { name: '渠道贡献' }));
+  expect(channels.getByText('天猫')).toBeInTheDocument();
+  expect(channels.getByText('¥8,000')).toBeInTheDocument();
+  expect(channels.getByText('京东')).toBeInTheDocument();
+  expect(channels.getByText('¥2,000')).toBeInTheDocument();
+  expect(channels.getByRole('meter', { name: '天猫渠道贡献' })).toHaveAttribute('aria-valuenow', '8000');
+  expect(channels.getByRole('meter', { name: '天猫渠道贡献' })).toHaveAttribute('aria-valuemax', '10000');
 });
 
-test('漏斗和渠道均无输入时分别显示真实空态', () => {
-  render(<RealtimeDashboard snapshot={snapshot} alerts={alerts} isRunning />);
+test('仅漏斗为空时只在漏斗显示空态且渠道保留真实值', () => {
+  render(<RealtimeDashboard snapshot={{
+    ...snapshot,
+    channelRanking: [{ platform: '天猫', gmv: 8000 }],
+  }} alerts={alerts} isRunning />);
 
-  const overview = within(screen.getByRole('region', { name: '转化漏斗与渠道贡献' }));
-  expect(overview.getAllByText('当前筛选条件下暂无数据')).toHaveLength(2);
+  const funnel = within(screen.getByRole('region', { name: '转化漏斗' }));
+  const channels = within(screen.getByRole('region', { name: '渠道贡献' }));
+  expect(funnel.getByText('当前筛选条件下暂无数据')).toBeInTheDocument();
+  expect(channels.queryByText('当前筛选条件下暂无数据')).not.toBeInTheDocument();
+  expect(channels.getByText('天猫')).toBeInTheDocument();
+  expect(channels.getByText('¥8,000')).toBeInTheDocument();
+});
+
+test('仅渠道为空时只在渠道显示空态且漏斗保留真实值', () => {
+  render(<RealtimeDashboard snapshot={{
+    ...snapshot,
+    funnel: [{ stage: 'visitors', value: 101 }],
+  }} alerts={alerts} isRunning />);
+
+  const funnel = within(screen.getByRole('region', { name: '转化漏斗' }));
+  const channels = within(screen.getByRole('region', { name: '渠道贡献' }));
+  expect(channels.getByText('当前筛选条件下暂无数据')).toBeInTheDocument();
+  expect(funnel.queryByText('当前筛选条件下暂无数据')).not.toBeInTheDocument();
+  const visitors = within(funnel.getByText('访客').closest('li')!);
+  expect(visitors.getByText('101')).toBeInTheDocument();
 });
 
 test('分钟经营脉冲输出GMV、订单、目标和异常四条可访问系列', () => {

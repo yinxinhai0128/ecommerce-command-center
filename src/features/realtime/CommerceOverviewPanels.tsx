@@ -17,16 +17,16 @@ export function CommerceOverviewPanels({ snapshot }: { snapshot: DashboardSnapsh
 
   return (
     <section className="panel commerce-overview" aria-label="转化漏斗与渠道贡献">
-      <div className="overview-section">
-        <h2>转化漏斗</h2>
+      <section className="overview-section" aria-labelledby="commerce-funnel-title">
+        <h2 id="commerce-funnel-title">转化漏斗</h2>
         {snapshot.funnel.length === 0 ? emptyState : (
           <ol className="funnel-list">
             {snapshot.funnel.map((item) => <li key={item.stage}><span>{stageLabels[item.stage]}</span><strong>{item.value.toLocaleString('zh-CN')}</strong></li>)}
           </ol>
         )}
-      </div>
-      <div className="overview-section">
-        <h2>渠道贡献</h2>
+      </section>
+      <section className="overview-section" aria-labelledby="commerce-channel-title">
+        <h2 id="commerce-channel-title">渠道贡献</h2>
         {snapshot.channelRanking.length === 0 ? emptyState : (
           <ul className="channel-list">
             {snapshot.channelRanking.map((item) => (
@@ -40,7 +40,7 @@ export function CommerceOverviewPanels({ snapshot }: { snapshot: DashboardSnapsh
             ))}
           </ul>
         )}
-      </div>
+      </section>
     </section>
   );
 }
