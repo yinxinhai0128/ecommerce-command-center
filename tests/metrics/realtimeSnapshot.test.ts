@@ -38,3 +38,21 @@ test('实时快照将目标均分到实际桶并输出筛选窗内的四状态�
     { id: 'paid-order', platform: '天猫', amount: 105, status: 'paid', at: new Date('2026-08-08T12:01:00+08:00') },
   ]);
 });
+
+test('多日趋势按各自日期均分无维度目标', () => {
+  const snapshot = calculateSnapshot({
+    ...dataset,
+    targets: [
+      { date: '2026-08-08', gmv: 300 },
+      { date: '2026-08-09', gmv: 900 },
+    ],
+  }, {
+    start: new Date('2026-08-08T00:00:00+08:00'),
+    end: new Date('2026-08-09T23:59:59+08:00'),
+  }, new Date('2026-08-09T23:59:59+08:00'));
+
+  expect(snapshot.salesTrend).toEqual([
+    expect.objectContaining({ at: new Date('2026-08-08T00:00:00+08:00'), target: 300 }),
+    expect.objectContaining({ at: new Date('2026-08-09T00:00:00+08:00'), target: 900 }),
+  ]);
+});

@@ -86,13 +86,32 @@ test('分钟经营脉冲输出GMV、订单、目标和异常四条可访问系�
 });
 
 test('最近订单最多八条并呈现输入中的订单字段', () => {
-  render(<RealtimeDashboard snapshot={snapshot} alerts={alerts} isRunning />);
+  const recentOrders: DashboardSnapshot['recentOrders'] = [
+    { id: 'created-latest', platform: '天猫', amount: 101, status: 'created', at: new Date('2026-08-08T12:08:00+08:00') },
+    { id: 'paid-next', platform: '京东', amount: 102, status: 'paid', at: new Date('2026-08-08T12:07:00+08:00') },
+    { id: 'fulfilled-next', platform: '抖音电商', amount: 103, status: 'fulfilled', at: new Date('2026-08-08T12:06:00+08:00') },
+    { id: 'cancelled-next', platform: '自营小程序', amount: 104, status: 'cancelled', at: new Date('2026-08-08T12:05:00+08:00') },
+    { id: 'order-5', platform: '天猫', amount: 105, status: 'created', at: new Date('2026-08-08T12:04:00+08:00') },
+    { id: 'order-6', platform: '京东', amount: 106, status: 'paid', at: new Date('2026-08-08T12:03:00+08:00') },
+    { id: 'order-7', platform: '抖音电商', amount: 107, status: 'fulfilled', at: new Date('2026-08-08T12:02:00+08:00') },
+    { id: 'order-8', platform: '自营小程序', amount: 108, status: 'cancelled', at: new Date('2026-08-08T12:01:00+08:00') },
+    { id: 'overflow-order', platform: '天猫', amount: 109, status: 'created', at: new Date('2026-08-08T12:00:00+08:00') },
+  ];
+  render(<RealtimeDashboard snapshot={{ ...snapshot, recentOrders }} alerts={alerts} isRunning />);
 
   expect(screen.getByText('实时订单')).toBeInTheDocument();
-  expect(screen.getByText('order-1')).toBeInTheDocument();
-  expect(screen.getByText('order-1').parentElement).toHaveTextContent('天猫');
-  expect(screen.getByText('¥100.00')).toBeInTheDocument();
-  expect(screen.queryByText('order-9')).not.toBeInTheDocument();
+  const rows = Array.from(document.querySelectorAll('.order-feed-item'));
+  expect(rows).toHaveLength(8);
+  expect(rows.map((item) => item.firstElementChild?.textContent)).toEqual(recentOrders.slice(0, 8).map((order) => order.id));
+  expect(rows.map((item) => item.querySelector('time')?.getAttribute('dateTime'))).toEqual(recentOrders.slice(0, 8).map((order) => order.at.toISOString()));
+  for (const order of recentOrders.slice(0, 8)) {
+    const row = screen.getByText(order.id).closest('li')!;
+    expect(row).toHaveTextContent(order.platform);
+    expect(row).toHaveTextContent(`¥${order.amount.toFixed(2)}`);
+    expect(row).toHaveTextContent(order.status);
+    expect(row.querySelector('time')).toHaveAttribute('dateTime', order.at.toISOString());
+  }
+  expect(screen.queryByText('overflow-order')).not.toBeInTheDocument();
 });
 
 test('点击告警在同一面板展开影响、证据和建议', () => {
