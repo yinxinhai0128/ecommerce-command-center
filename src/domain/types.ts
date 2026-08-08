@@ -135,3 +135,42 @@ export type DashboardAlert = {
   suggestion: string;
   createdAt: Date;
 };
+
+export type AnalysisContext = {
+  range: {
+    start: string;
+    end: string;
+    platform?: Platform;
+    storeId?: string;
+    categoryId?: string;
+  };
+  comparisonLabel: string;
+  kpis: DashboardSnapshot['kpis'];
+  topContributors: {
+    channels: Array<{ label: string; value: number }>;
+    products: Array<{ label: string; value: number }>;
+    regions: Array<{ label: string; value: number }>;
+  };
+  alerts: Array<Pick<DashboardAlert, 'severity' | 'metric' | 'title' | 'evidence' | 'impactAmount' | 'suggestion'>>;
+  forecast7d: Array<{ date: string; gmv: number }>;
+  targetProbability: number;
+};
+
+export type AnalysisFallbackReason =
+  | 'not_configured'
+  | 'upstream_error'
+  | 'timeout'
+  | 'invalid_response'
+  | 'network_error';
+
+export type AnalysisResult = {
+  summary: string;
+  signals: Array<{ title: string; evidence: string }>;
+  causes: Array<{ title: string; evidence: string }>;
+  risks: Array<{ title: string; evidence: string }>;
+  actions: Array<{ title: string; rationale: string }>;
+  followUps: string[];
+  source: 'deepseek' | 'local';
+  generatedAt: string;
+  fallbackReason?: AnalysisFallbackReason;
+};
