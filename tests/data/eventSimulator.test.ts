@@ -105,12 +105,26 @@ test('退款事件仅接受已支付订单，且累计退款不能超过实付�
     id: 'event-refund-2', type: 'refund',
     refund: { id: 'refund-excessive', orderId: 'order-1', amount: 81, createdAt: now, status: 'completed', reason: '超额' },
   };
+  const zeroRefund: CommerceEvent = {
+    id: 'event-refund-3', type: 'refund',
+    refund: { id: 'refund-zero', orderId: 'order-1', amount: 0, createdAt: now, status: 'requested', reason: '零金额' },
+  };
+  const negativeRefund: CommerceEvent = {
+    id: 'event-refund-4', type: 'refund',
+    refund: { id: 'refund-negative', orderId: 'order-1', amount: -1, createdAt: now, status: 'requested', reason: '负金额' },
+  };
   const createdDataset: CommerceDataset = { ...paidDataset, orders: [{ ...dataset.orders[0], status: 'created' }] };
+  const fulfilledDataset: CommerceDataset = { ...paidDataset, orders: [{ ...dataset.orders[0], status: 'fulfilled', paidAt: now }], refunds: [] };
 
   const next = applyEvent(paidDataset, validRefund);
+  const fulfilledNext = applyEvent(fulfilledDataset, validRefund);
 
   expect(next.refunds.map((refund) => refund.id)).toEqual(['refund-existing', 'refund-valid']);
   expect(next.refunds.reduce((total, refund) => total + refund.amount, 0)).toBe(50);
+  expect(next.refunds[1]).toMatchObject({ id: 'refund-valid', orderId: 'order-1', amount: 30, status: 'approved' });
+  expect(fulfilledNext.refunds).toEqual([expect.objectContaining({ id: 'refund-valid', orderId: 'order-1', amount: 30, status: 'approved' })]);
   expect(applyEvent(paidDataset, excessiveRefund)).toBe(paidDataset);
+  expect(applyEvent(paidDataset, zeroRefund)).toBe(paidDataset);
+  expect(applyEvent(paidDataset, negativeRefund)).toBe(paidDataset);
   expect(applyEvent(createdDataset, validRefund)).toBe(createdDataset);
 });
