@@ -87,29 +87,39 @@ test('分钟经营脉冲输出GMV、订单、目标和异常四条可访问系�
 
 test('最近订单最多八条并呈现输入中的订单字段', () => {
   const recentOrders: DashboardSnapshot['recentOrders'] = [
-    { id: 'created-latest', platform: '天猫', amount: 101, status: 'created', at: new Date('2026-08-08T12:08:00+08:00') },
-    { id: 'paid-next', platform: '京东', amount: 102, status: 'paid', at: new Date('2026-08-08T12:07:00+08:00') },
-    { id: 'fulfilled-next', platform: '抖音电商', amount: 103, status: 'fulfilled', at: new Date('2026-08-08T12:06:00+08:00') },
-    { id: 'cancelled-next', platform: '自营小程序', amount: 104, status: 'cancelled', at: new Date('2026-08-08T12:05:00+08:00') },
-    { id: 'order-5', platform: '天猫', amount: 105, status: 'created', at: new Date('2026-08-08T12:04:00+08:00') },
-    { id: 'order-6', platform: '京东', amount: 106, status: 'paid', at: new Date('2026-08-08T12:03:00+08:00') },
     { id: 'order-7', platform: '抖音电商', amount: 107, status: 'fulfilled', at: new Date('2026-08-08T12:02:00+08:00') },
-    { id: 'order-8', platform: '自营小程序', amount: 108, status: 'cancelled', at: new Date('2026-08-08T12:01:00+08:00') },
+    { id: 'paid-next', platform: '京东', amount: 102, status: 'paid', at: new Date('2026-08-08T12:07:00+08:00') },
     { id: 'overflow-order', platform: '天猫', amount: 109, status: 'created', at: new Date('2026-08-08T12:00:00+08:00') },
+    { id: 'cancelled-next', platform: '自营小程序', amount: 104, status: 'cancelled', at: new Date('2026-08-08T12:05:00+08:00') },
+    { id: 'created-latest', platform: '天猫', amount: 101, status: 'created', at: new Date('2026-08-08T12:08:00+08:00') },
+    { id: 'order-6', platform: '京东', amount: 106, status: 'paid', at: new Date('2026-08-08T12:03:00+08:00') },
+    { id: 'fulfilled-next', platform: '抖音电商', amount: 103, status: 'fulfilled', at: new Date('2026-08-08T12:06:00+08:00') },
+    { id: 'order-8', platform: '自营小程序', amount: 108, status: 'cancelled', at: new Date('2026-08-08T12:01:00+08:00') },
+    { id: 'order-5', platform: '天猫', amount: 105, status: 'created', at: new Date('2026-08-08T12:04:00+08:00') },
   ];
+  const expectedVisibleOrders = [
+    { id: 'created-latest', platform: '天猫', amount: 101, status: 'created', at: '2026-08-08T04:08:00.000Z' },
+    { id: 'paid-next', platform: '京东', amount: 102, status: 'paid', at: '2026-08-08T04:07:00.000Z' },
+    { id: 'fulfilled-next', platform: '抖音电商', amount: 103, status: 'fulfilled', at: '2026-08-08T04:06:00.000Z' },
+    { id: 'cancelled-next', platform: '自营小程序', amount: 104, status: 'cancelled', at: '2026-08-08T04:05:00.000Z' },
+    { id: 'order-5', platform: '天猫', amount: 105, status: 'created', at: '2026-08-08T04:04:00.000Z' },
+    { id: 'order-6', platform: '京东', amount: 106, status: 'paid', at: '2026-08-08T04:03:00.000Z' },
+    { id: 'order-7', platform: '抖音电商', amount: 107, status: 'fulfilled', at: '2026-08-08T04:02:00.000Z' },
+    { id: 'order-8', platform: '自营小程序', amount: 108, status: 'cancelled', at: '2026-08-08T04:01:00.000Z' },
+  ] as const;
   render(<RealtimeDashboard snapshot={{ ...snapshot, recentOrders }} alerts={alerts} isRunning />);
 
   expect(screen.getByText('实时订单')).toBeInTheDocument();
   const rows = Array.from(document.querySelectorAll('.order-feed-item'));
   expect(rows).toHaveLength(8);
-  expect(rows.map((item) => item.firstElementChild?.textContent)).toEqual(recentOrders.slice(0, 8).map((order) => order.id));
-  expect(rows.map((item) => item.querySelector('time')?.getAttribute('dateTime'))).toEqual(recentOrders.slice(0, 8).map((order) => order.at.toISOString()));
-  for (const order of recentOrders.slice(0, 8)) {
+  expect(rows.map((item) => item.firstElementChild?.textContent)).toEqual(expectedVisibleOrders.map((order) => order.id));
+  expect(rows.map((item) => item.querySelector('time')?.getAttribute('dateTime'))).toEqual(expectedVisibleOrders.map((order) => order.at));
+  for (const order of expectedVisibleOrders) {
     const row = screen.getByText(order.id).closest('li')!;
     expect(row).toHaveTextContent(order.platform);
     expect(row).toHaveTextContent(`¥${order.amount.toFixed(2)}`);
     expect(row).toHaveTextContent(order.status);
-    expect(row.querySelector('time')).toHaveAttribute('dateTime', order.at.toISOString());
+    expect(row.querySelector('time')).toHaveAttribute('dateTime', order.at);
   }
   expect(screen.queryByText('overflow-order')).not.toBeInTheDocument();
 });
