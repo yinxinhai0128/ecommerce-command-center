@@ -17,7 +17,10 @@ pnpm dev
 pnpm test
 pnpm build
 pnpm e2e
+pnpm screenshots
 ```
+
+需要 Node.js 24 或更高版本；开发服务使用 Node 的 `--env-file-if-exists` 支持读取可选 `.env`。`pnpm e2e` 只运行核心流程，不会改写交付截图；需要明确刷新截图时运行 `pnpm screenshots`。
 
 ## 分析服务配置
 

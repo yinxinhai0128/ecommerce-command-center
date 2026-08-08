@@ -65,7 +65,7 @@ test('经营驾驶舱关键经营流在桌面视口可用', async ({ page }) => 
   expect(relevantMessages.map((message) => `${message.type()}: ${message.text()}`)).toEqual([]);
 });
 
-test('保存三个桌面视口的实时监控与智能分析截图', async ({ page }) => {
+test('保存三个桌面视口的实时监控与智能分析截图 @screenshots', async ({ page }) => {
   for (const viewport of viewports) {
     await page.setViewportSize(viewport);
     await page.goto('/');

@@ -30,12 +30,12 @@
 
 | 文件 | 像素 | 字节 |
 | --- | --- | ---: |
-| `screenshots/realtime-1920x1080.png` | 1920×1080 | 101,121 |
-| `screenshots/analysis-1920x1080.png` | 1920×1080 | 69,565 |
-| `screenshots/realtime-1440x900.png` | 1440×900 | 91,934 |
-| `screenshots/analysis-1440x900.png` | 1440×900 | 65,938 |
-| `screenshots/realtime-1280x800.png` | 1280×800 | 83,787 |
-| `screenshots/analysis-1280x800.png` | 1280×800 | 63,289 |
+| `screenshots/realtime-1920x1080.png` | 1920×1080 | 102,907 |
+| `screenshots/analysis-1920x1080.png` | 1920×1080 | 69,479 |
+| `screenshots/realtime-1440x900.png` | 1440×900 | 95,682 |
+| `screenshots/analysis-1440x900.png` | 1440×900 | 65,791 |
+| `screenshots/realtime-1280x800.png` | 1280×800 | 89,363 |
+| `screenshots/analysis-1280x800.png` | 1280×800 | 63,131 |
 
 逐张复核确认：顶部导航、KPI 顺序、3-6-3 主布局、漏斗/渠道、主图、订单/预警与底部三拆解均完整；智能分析保持四个主区及问答区；浅色背景、语义色、字号层级与容器边界一致；没有横向滚动、裁切、重叠、默认控件字体或意外换行。最后一轮主图不再出现无预警的红色异常点，1280px 预测金额不重叠。
 
@@ -60,3 +60,10 @@
 - 敏感扫描：受追踪范围与 `dist/` 未发现疑似 Key；`.env` 不存在且未追踪。模拟数据仅使用通用商品、商店和客户占位名称。
 - React 只读性能审查：`echarts-for-react` 使生产首包为约 450 kB gzip，构建已给出 chunk 警告。这是已记录的非阻塞风险；本轮没有为消除警告进行大范围代码分割或重构。
 - 交付结束前已停止本任务开发服务，5173 与 8787 均没有监听进程。
+
+## 修复轮 1：环境变量与截图命令边界
+
+1. 临时 `.env` 只写入 `PORT=8790`。旧 `pnpm dev` 的 RED 证据为前端监听 5173、Express 仍监听 8787，8790 未监听。确认后停止全部进程并删除该临时文件。
+2. 参数验证表明 `tsx --env-file-if-exists=.env watch server/index.ts` 会把 `watch` 解析为入口文件，不能使用。项目当前 Node 为 v24.15.0，最终改为 `node --env-file-if-exists=.env --import tsx --watch server/index.ts`：临时文件存在时 GREEN 为 5173 + 8790；删除 `.env` 后 GREEN 为 5173 + 8787。README 明确 Node.js 24 或更高版本要求。
+3. 拆分 E2E：截图用例标记为 `@screenshots`；`pnpm e2e` 排除该标记，`pnpm screenshots` 仅运行该标记。旧 `pnpm e2e` 的 RED 证据为 6 张 PNG 的 SHA-256 都发生变化；新 `pnpm e2e` 为 1/1 通过且 6 张截图 hash 变化数为 0；`pnpm screenshots` 为 1/1 通过并在 05:01:46–05:01:54 明确重生 6 张交付图。
+4. 最后一次逐张视觉复核仍通过：三种桌面尺寸无横滚、裁切或重叠，主图无无预警红色异常点，分析图金额紧凑且可读。

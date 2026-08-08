@@ -1,11 +1,12 @@
 {
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"vite\" \"tsx watch server/index.ts\"",
+    "dev": "concurrently \"vite\" \"node --env-file-if-exists=.env --import tsx --watch server/index.ts\"",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "playwright test"
+    "e2e": "playwright test --grep-invert @screenshots",
+    "screenshots": "playwright test --grep @screenshots"
   },
   "dependencies": {
     "echarts": "^6.1.0",
