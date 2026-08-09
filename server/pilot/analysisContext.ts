@@ -2,6 +2,7 @@ import type { PilotAnalysisContext, PilotAnalysisUnit, PilotSnapshot } from './c
 
 const MAX_CONTRIBUTORS_PER_DIMENSION = 12;
 const MAX_LABEL_LENGTH = 200;
+const dimensionLabels = { category: '品类', seller: '卖家', customerState: '地区' } as const;
 
 const metricDefinitions: Array<{
   key: keyof PilotSnapshot['kpis'];
@@ -23,11 +24,22 @@ function rankContributors(
   items: Array<{ label: string; itemGmv: number }>,
   dimension: PilotAnalysisContext['contributors'][number]['dimension'],
 ) {
+  const occurrences = new Map<string, number>();
   return items
     .map((item) => ({ ...item, label: cleanLabel(item.label) }))
     .sort((left, right) => right.itemGmv - left.itemGmv || left.label.localeCompare(right.label))
     .slice(0, MAX_CONTRIBUTORS_PER_DIMENSION)
-    .map((item, index) => ({ id: `${dimension}:${index + 1}`, dimension, ...item }));
+    .map((item, index) => {
+      const publicLabel = `${dimensionLabels[dimension]}：${item.label}`;
+      const occurrence = (occurrences.get(publicLabel) ?? 0) + 1;
+      occurrences.set(publicLabel, occurrence);
+      return {
+        id: `${dimension}:${index + 1}`,
+        dimension,
+        ...item,
+        label: occurrence === 1 ? publicLabel : `${publicLabel}（${occurrence}）`,
+      };
+    });
 }
 
 export function buildPilotAnalysisContext(snapshot: PilotSnapshot, question?: string): PilotAnalysisContext {
@@ -63,10 +75,12 @@ export function buildPilotAnalysisContext(snapshot: PilotSnapshot, question?: st
   };
 }
 
-export function trustedNumberAllowList(context: PilotAnalysisContext) {
-  return [
-    ...context.facts.map(({ value, unit }) => ({ value, unit })),
-    ...context.trendChanges.map(({ value, unit }) => ({ value, unit })),
-    ...context.contributors.map(({ itemGmv }) => ({ value: itemGmv, unit: 'currency' as const })),
-  ];
+export function trustedEvidenceAllowList(context: PilotAnalysisContext) {
+  return {
+    signals: [
+      ...context.facts.map(({ label, value, unit }) => ({ label, value, unit })),
+      ...context.trendChanges.map(({ label, value, unit }) => ({ label, value, unit })),
+    ],
+    causes: context.contributors.map(({ label, itemGmv }) => ({ label, value: itemGmv, unit: 'currency' as const })),
+  };
 }
