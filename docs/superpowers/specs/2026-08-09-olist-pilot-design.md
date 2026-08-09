@@ -135,6 +135,8 @@ var/olist/
 
 所有日期筛选按 `order_purchase_timestamp` 选择订单队列，结束时间包含当日末尾并受回放虚拟时间上限约束。
 
+Olist 时间字段没有时区偏移。本期保留其原始本地墙上时间，并以同一无时区规则完成排序、筛选和时长计算；API 和页面统一标注“源数据本地时间”，不擅自换算成北京时间或推定的巴西时区。
+
 ### 7.1 核心指标
 
 - 商品成交额：非 `canceled`、非 `unavailable` 订单的 `order_items.price` 之和，不含运费。
@@ -306,6 +308,8 @@ pnpm e2e
 - 现有 `DEEPSEEK_API_KEY` 和 `PORT`。
 
 不新增云服务或 Docker 前置条件。项目继续要求 README 所声明的 Node.js 主版本。
+
+本地数据库使用该 Node.js 版本自带的 `node:sqlite`，不引入需要本机编译的原生 SQLite 驱动。CSV 和 ZIP 仅允许增加纯 JavaScript 依赖。
 
 ## 14. 验收标准
 
