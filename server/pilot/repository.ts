@@ -24,7 +24,18 @@ export type PilotRepository = {
 };
 
 const filteredOrdersCte = `
-  WITH filtered_orders AS (
+  WITH matching_items AS (
+    SELECT
+      order_items.order_id,
+      SUM(order_items.price) AS item_gmv,
+      COUNT(*) AS item_count
+    FROM order_items
+    JOIN products ON products.product_id = order_items.product_id
+    WHERE (:category IS NULL OR products.category_name = :category)
+      AND (:sellerId IS NULL OR order_items.seller_id = :sellerId)
+    GROUP BY order_items.order_id
+  ),
+  filtered_orders AS (
     SELECT
       orders.order_id,
       orders.order_status,
@@ -34,18 +45,15 @@ const filteredOrdersCte = `
       orders.delivered_at,
       orders.estimated_delivery_at,
       customers.state AS customer_state,
-      SUM(order_items.price) AS item_gmv,
-      COUNT(*) AS item_count
+      COALESCE(matching_items.item_gmv, 0) AS item_gmv,
+      COALESCE(matching_items.item_count, 0) AS item_count
     FROM orders
     JOIN customers ON customers.customer_id = orders.customer_id
-    JOIN order_items ON order_items.order_id = orders.order_id
-    JOIN products ON products.product_id = order_items.product_id
+    LEFT JOIN matching_items ON matching_items.order_id = orders.order_id
     WHERE orders.purchase_at >= :start
       AND orders.purchase_at <= :end
-      AND (:category IS NULL OR products.category_name = :category)
-      AND (:sellerId IS NULL OR order_items.seller_id = :sellerId)
       AND (:customerState IS NULL OR customers.state = :customerState)
-    GROUP BY orders.order_id
+      AND ((:category IS NULL AND :sellerId IS NULL) OR matching_items.order_id IS NOT NULL)
   )
 `;
 
@@ -151,7 +159,7 @@ export function createPilotRepository(database: DatabaseSync): PilotRepository {
   return {
     getFilterOptions() {
       return {
-        categories: (database.prepare('SELECT category_name FROM products WHERE category_name IS NOT NULL ORDER BY category_name').all() as Array<{ category_name: string }>).map((row) => row.category_name),
+        categories: (database.prepare('SELECT DISTINCT category_name FROM products WHERE category_name IS NOT NULL ORDER BY category_name').all() as Array<{ category_name: string }>).map((row) => row.category_name),
         sellerIds: (database.prepare('SELECT seller_id FROM sellers ORDER BY seller_id').all() as Array<{ seller_id: string }>).map((row) => row.seller_id),
         customerStates: (database.prepare('SELECT DISTINCT state FROM customers ORDER BY state').all() as Array<{ state: string }>).map((row) => row.state),
       };

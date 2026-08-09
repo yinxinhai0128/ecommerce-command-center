@@ -1,6 +1,11 @@
 import { DatabaseSync } from 'node:sqlite';
+import { cp, mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
-import { createPilotSchema } from '../../server/pilot/database';
+import { createPilotSchema, openPilotDatabase } from '../../server/pilot/database';
+import { importOlistDataset } from '../../server/pilot/importer';
+import { resolveOlistPaths } from '../../server/pilot/paths';
 import { createPilotRepository } from '../../server/pilot/repository';
 
 const databases: DatabaseSync[] = [];
@@ -19,6 +24,7 @@ function createRepository() {
     INSERT INTO sellers VALUES ('seller-1', '30000', 'belo horizonte', 'MG'), ('seller-2', '40000', 'curitiba', 'PR');
     INSERT INTO products VALUES
       ('p-books', 'books', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+      ('p-books-alt', 'books', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
       ('p-beauty', 'beauty', NULL, NULL, NULL, NULL, NULL, NULL, NULL);
     INSERT INTO orders VALUES
       ('o1', 'c-sp', 'delivered', '2018-01-01 10:00:00', '2018-01-01 11:00:00', '2018-01-02 09:00:00', '2018-01-05 10:00:00', '2018-01-06 10:00:00'),
@@ -121,4 +127,177 @@ test('compares with the immediately preceding equal-length calendar interval', (
 
   expect(snapshot.kpis.itemGmv).toEqual({ value: 490, comparisonValue: 50, changeRate: 8.8 });
   expect(snapshot.comparisonLabel).toBe('2017-12-01 to 2017-12-31');
+});
+
+test('keeps unitemized orders in an unfiltered cohort', () => {
+  // Requiring every order to have an item must fail this test.
+  const database = new DatabaseSync(':memory:');
+  databases.push(database);
+  createPilotSchema(database);
+  database.exec(`
+    INSERT INTO customers VALUES ('customer', 'unique', '01000', 'sao paulo', 'SP');
+    INSERT INTO orders VALUES
+      ('canceled', 'customer', 'canceled', '2018-01-01 10:00:00', NULL, NULL, NULL, NULL),
+      ('delivered', 'customer', 'delivered', '2018-01-01 11:00:00', NULL, NULL, '2018-01-02 11:00:00', '2018-01-03 11:00:00');
+  `);
+
+  const snapshot = createPilotRepository(database).getSnapshot({ start: '2018-01-01', end: '2018-01-01' }, '2018-01-01 23:59:59');
+
+  expect(snapshot.kpis.cancellationRate.value).toBe(1 / 2);
+  expect(snapshot.fulfillmentFunnel).toEqual([
+    { stage: 'purchased', value: 2 },
+    { stage: 'approved', value: 0 },
+    { stage: 'carrier', value: 0 },
+    { stage: 'delivered', value: 1 },
+  ]);
+  expect(snapshot.recentOrders.map((order) => [order.orderId, order.itemGmv, order.itemCount])).toEqual([
+    ['delivered', 0, 0],
+    ['canceled', 0, 0],
+  ]);
+});
+
+test('returns distinct category filter options', () => {
+  // Returning one option per product rather than per category must fail this test.
+  expect(createRepository().getFilterOptions().categories).toEqual(['beauty', 'books']);
+});
+
+test('caps every module at the exact local replay timestamp', () => {
+  // Including a row after the exact replay second must fail this test.
+  const database = new DatabaseSync(':memory:');
+  databases.push(database);
+  createPilotSchema(database);
+  database.exec(`
+    INSERT INTO customers VALUES ('customer', 'unique', '01000', 'sao paulo', 'SP');
+    INSERT INTO sellers VALUES ('seller-1', '30000', 'belo horizonte', 'MG');
+    INSERT INTO products VALUES ('book', 'books', NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    INSERT INTO orders VALUES
+      ('before', 'customer', 'delivered', '2018-01-04 11:59:59', '2018-01-04 11:59:59', '2018-01-04 11:59:59', '2018-01-04 11:59:59', '2018-01-04 12:00:00'),
+      ('exact', 'customer', 'delivered', '2018-01-04 12:00:00', '2018-01-04 12:00:00', '2018-01-04 12:00:00', '2018-01-04 12:00:00', '2018-01-04 12:00:01'),
+      ('after', 'customer', 'delivered', '2018-01-04 12:00:01', '2018-01-04 12:00:01', '2018-01-04 12:00:01', '2018-01-04 12:00:01', '2018-01-04 12:00:02'),
+      ('day-end', 'customer', 'delivered', '2018-01-04 23:59:59', '2018-01-04 23:59:59', '2018-01-04 23:59:59', '2018-01-04 23:59:59', '2018-01-05 00:00:00'),
+      ('next-day', 'customer', 'delivered', '2018-01-05 00:00:00', '2018-01-05 00:00:00', '2018-01-05 00:00:00', '2018-01-05 00:00:00', '2018-01-05 00:00:01');
+    INSERT INTO order_items VALUES
+      ('before', 1, 'book', 'seller-1', '2018-01-04 11:59:59', 10, 0),
+      ('exact', 1, 'book', 'seller-1', '2018-01-04 12:00:00', 20, 0),
+      ('after', 1, 'book', 'seller-1', '2018-01-04 12:00:01', 30, 0),
+      ('day-end', 1, 'book', 'seller-1', '2018-01-04 23:59:59', 40, 0),
+      ('next-day', 1, 'book', 'seller-1', '2018-01-05 00:00:00', 50, 0);
+  `);
+
+  const snapshot = createPilotRepository(database).getSnapshot({ start: '2018-01-04', end: '2018-01-05', category: 'books' }, '2018-01-04 12:00:00');
+
+  expect(snapshot.kpis.itemGmv.value).toBe(30);
+  expect(snapshot.dailyTrend).toEqual([{ date: '2018-01-04', itemGmv: 30, validOrderCount: 2 }]);
+  expect(snapshot.fulfillmentFunnel).toEqual([
+    { stage: 'purchased', value: 2 },
+    { stage: 'approved', value: 2 },
+    { stage: 'carrier', value: 2 },
+    { stage: 'delivered', value: 2 },
+  ]);
+  expect(snapshot.categoryRanking).toEqual([{ category: 'books', itemGmv: 30 }]);
+  expect(snapshot.sellerRanking).toEqual([{ sellerId: 'seller-1', itemGmv: 30 }]);
+  expect(snapshot.customerStateRanking).toEqual([{ customerState: 'SP', itemGmv: 30 }]);
+  expect(snapshot.recentOrders.map((order) => order.orderId)).toEqual(['exact', 'before']);
+});
+
+test('uses matching line-item GMV without duplicating filtered orders', () => {
+  // Summing an unselected line item or counting its order twice must fail this test.
+  const database = new DatabaseSync(':memory:');
+  databases.push(database);
+  createPilotSchema(database);
+  database.exec(`
+    INSERT INTO customers VALUES ('customer', 'unique', '01000', 'sao paulo', 'SP');
+    INSERT INTO sellers VALUES ('seller-1', '30000', 'belo horizonte', 'MG'), ('seller-2', '40000', 'curitiba', 'PR');
+    INSERT INTO products VALUES
+      ('book', 'books', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+      ('beauty', 'beauty', NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    INSERT INTO orders VALUES
+      ('multi', 'customer', 'delivered', '2018-01-01 10:00:00', '2018-01-01 10:00:00', '2018-01-01 10:00:00', '2018-01-02 10:00:00', '2018-01-03 10:00:00'),
+      ('canceled', 'customer', 'canceled', '2018-01-02 10:00:00', '2018-01-02 10:00:00', NULL, NULL, NULL);
+    INSERT INTO order_items VALUES
+      ('multi', 1, 'book', 'seller-1', '2018-01-01 10:00:00', 100, 0),
+      ('multi', 2, 'beauty', 'seller-2', '2018-01-01 10:00:00', 200, 0),
+      ('canceled', 1, 'book', 'seller-1', '2018-01-02 10:00:00', 25, 0);
+  `);
+
+  const snapshot = createPilotRepository(database).getSnapshot({ start: '2018-01-01', end: '2018-01-02', category: 'books', sellerId: 'seller-1' }, '2018-01-02 23:59:59');
+
+  expect(snapshot.kpis.itemGmv.value).toBe(100);
+  expect(snapshot.kpis.validOrderCount.value).toBe(1);
+  expect(snapshot.kpis.cancellationRate.value).toBe(1 / 2);
+  expect(snapshot.fulfillmentFunnel).toEqual([
+    { stage: 'purchased', value: 2 },
+    { stage: 'approved', value: 2 },
+    { stage: 'carrier', value: 1 },
+    { stage: 'delivered', value: 1 },
+  ]);
+  expect(snapshot.categoryRanking).toEqual([{ category: 'books', itemGmv: 100 }]);
+  expect(snapshot.sellerRanking).toEqual([{ sellerId: 'seller-1', itemGmv: 100 }]);
+  expect(snapshot.recentOrders.map((order) => [order.orderId, order.itemGmv, order.itemCount])).toEqual([
+    ['canceled', 25, 1],
+    ['multi', 100, 1],
+  ]);
+});
+
+test('changes only the review KPI when an order has two reviews', () => {
+  // Folding reviews into an order-item aggregate must fail this test.
+  const database = new DatabaseSync(':memory:');
+  databases.push(database);
+  createPilotSchema(database);
+  database.exec(`
+    INSERT INTO customers VALUES ('customer', 'unique', '01000', 'sao paulo', 'SP');
+    INSERT INTO sellers VALUES ('seller-1', '30000', 'belo horizonte', 'MG');
+    INSERT INTO products VALUES ('book', 'books', NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    INSERT INTO orders VALUES ('order', 'customer', 'delivered', '2018-01-01 10:00:00', '2018-01-01 11:00:00', '2018-01-01 12:00:00', '2018-01-02 10:00:00', '2018-01-03 10:00:00');
+    INSERT INTO order_items VALUES ('order', 1, 'book', 'seller-1', '2018-01-01 10:00:00', 100, 0);
+    INSERT INTO reviews VALUES ('first', 'order', 5, NULL, NULL, '2018-01-02 10:00:00', '2018-01-02 11:00:00');
+  `);
+  const repository = createPilotRepository(database);
+  const before = repository.getSnapshot({ start: '2018-01-01', end: '2018-01-01' }, '2018-01-01 23:59:59');
+  database.exec("INSERT INTO reviews VALUES ('second', 'order', 1, NULL, NULL, '2018-01-02 12:00:00', '2018-01-02 13:00:00')");
+  const after = repository.getSnapshot({ start: '2018-01-01', end: '2018-01-01' }, '2018-01-01 23:59:59');
+
+  expect(before.kpis.averageReviewScore.value).toBe(5);
+  expect(after.kpis.averageReviewScore.value).toBe(3);
+  expect(after.kpis.itemGmv.value).toBe(before.kpis.itemGmv.value);
+  expect(after.kpis.validOrderCount.value).toBe(before.kpis.validOrderCount.value);
+  expect(after.fulfillmentFunnel).toEqual(before.fulfillmentFunnel);
+});
+
+test('keeps imported Olist timestamp columns distinct at a replay boundary', async () => {
+  // Swapping an imported order timestamp column must fail this test.
+  const tempDir = await mkdtemp(join(tmpdir(), 'olist-repository-'));
+  const sourceDir = join(tempDir, 'source');
+  const dataDir = join(tempDir, 'data');
+  try {
+    await cp(join(process.cwd(), 'tests', 'fixtures', 'olist'), sourceDir, { recursive: true });
+    await writeFile(join(sourceDir, 'olist_orders_dataset.csv'), `order_id,customer_id,order_status,order_purchase_timestamp,order_approved_at,order_delivered_carrier_date,order_delivered_customer_date,order_estimated_delivery_date
+o1,c1,delivered,2017-01-01 23:59:55,2017-01-01 23:59:56,2017-01-01 23:59:57,2017-01-01 23:59:58,2017-01-01 23:59:59
+o2,c2,delivered,2017-02-01 10:00:00,2017-02-01 11:00:00,2017-02-02 09:00:00,2017-02-10 12:00:00,2017-02-08 12:00:00
+o3,c1,canceled,2017-03-01 10:00:00,2017-03-01 10:20:00,,,
+o4,c2,unavailable,2017-04-01 10:00:00,2017-04-01 10:20:00,,,
+o5,c1,shipped,2017-05-01 10:00:00,2017-05-01 10:20:00,2017-05-02 09:00:00,,2017-05-08 12:00:00
+o6,c2,processing,2017-06-01 10:00:00,2017-06-01 10:20:00,,,2017-06-08 12:00:00
+o7,c1,delivered,2017-07-01 10:00:00,2017-07-01 10:20:00,2017-07-02 09:00:00,2017-07-05 12:00:00,2017-07-06 12:00:00
+o8,c2,delivered,2017-08-01 10:00:00,2017-08-01 10:20:00,2017-08-02 09:00:00,2017-08-04 12:00:00,2017-08-06 12:00:00
+`);
+    await importOlistDataset({ sourceDir, dataDir, now: new Date('2026-08-09T00:00:00.000Z') });
+    const database = openPilotDatabase(resolveOlistPaths(dataDir).databasePath);
+    const row = database.prepare("SELECT purchase_at, approved_at, carrier_at, delivered_at, estimated_delivery_at FROM orders WHERE order_id = 'o1'").get() as Record<string, string>;
+    const snapshot = createPilotRepository(database).getSnapshot({ start: '2017-01-01', end: '2017-01-01' }, '2017-01-01 23:59:59');
+
+    expect(row).toEqual({ purchase_at: '2017-01-01 23:59:55', approved_at: '2017-01-01 23:59:56', carrier_at: '2017-01-01 23:59:57', delivered_at: '2017-01-01 23:59:58', estimated_delivery_at: '2017-01-01 23:59:59' });
+    expect(snapshot.recentOrders).toEqual([{ orderId: 'o1', purchasedAt: '2017-01-01 23:59:55', status: 'delivered', itemGmv: 30.75, itemCount: 2, customerState: 'SP' }]);
+    expect(snapshot.fulfillmentFunnel).toEqual([
+      { stage: 'purchased', value: 1 },
+      { stage: 'approved', value: 1 },
+      { stage: 'carrier', value: 1 },
+      { stage: 'delivered', value: 1 },
+    ]);
+    expect(snapshot.kpis.onTimeDeliveryRate.value).toBe(1);
+    expect(snapshot.kpis.averageDeliveryDays.value).toBeCloseTo(3 / 86_400, 8);
+    database.close();
+  } finally {
+    // DatabaseSync closes with sqlite3_close_v2; Windows releases its file handle after this worker exits.
+  }
 });
