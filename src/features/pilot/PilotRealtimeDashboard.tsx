@@ -31,9 +31,9 @@ export function PilotRealtimeDashboard({ snapshot, onClearFilters }: PilotRealti
   return (
     <div className="pilot-realtime-dashboard">
       <section className="pilot-kpi-strip" aria-label="Olist 核心经营指标">
-        {kpis.map(({ key, label, format, inverse }) => <article key={key} data-testid="pilot-kpi" className="kpi-item"><span>{label}</span><MetricValue value={format(snapshot.kpis[key].value)} change={changeText(snapshot.kpis[key].changeRate, inverse)} /></article>)}
+        {kpis.map(({ key, label, format, inverse }) => <article key={key} data-testid="pilot-kpi" className="kpi-item"><span>{label}</span><div data-testid={key === 'itemGmv' ? 'pilot-item-gmv' : undefined}><MetricValue value={format(snapshot.kpis[key].value)} change={changeText(snapshot.kpis[key].changeRate, inverse)} /></div></article>)}
       </section>
-      <p className="pilot-cutoff">源数据本地时间 {snapshot.sourceLocalNow}</p>
+      <p data-testid="pilot-source-local-now" className="pilot-cutoff">源数据本地时间 {snapshot.sourceLocalNow}</p>
       <Panel title="每日成交趋势"><PilotSalesChart trend={snapshot.dailyTrend} /></Panel>
       <Panel title="履约漏斗">{snapshot.fulfillmentFunnel.length === 0 ? <p className="panel-empty">当前筛选条件下暂无履约数据</p> : <ol className="funnel-list pilot-funnel">{snapshot.fulfillmentFunnel.map((item) => <li key={item.stage}><span>{stageLabel[item.stage]}</span><strong>{item.value.toLocaleString('zh-CN')}</strong></li>)}</ol>}</Panel>
       <div className="pilot-rankings">

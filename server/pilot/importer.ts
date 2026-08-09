@@ -73,7 +73,7 @@ export async function importOlistDataset({ sourceDir, dataDir, now = new Date() 
       source: { dataset: 'olistbr/brazilian-ecommerce', url: 'https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce', license: 'CC BY-NC-SA 4.0' },
       files: hashes,
       tables: Object.fromEntries(Object.entries(files).map(([name, filename]) => [name, { sourceRows: parsed[name as keyof typeof files].length, importedRows: verification.tableRows[name] }])),
-      range: verification.range,
+      range: { start: verification.range.start.slice(0, 10), end: verification.range.end.slice(0, 10) },
     };
     await writeFile(temporaryManifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
     database.close();

@@ -27,6 +27,7 @@ test('imports required Olist files and records matching source rows', async () =
   expect(result.ready).toBe(true);
   expect(result.tables.orders).toEqual({ sourceRows: 8, importedRows: 8 });
   expect(result.tables.orderItems).toEqual({ sourceRows: 9, importedRows: 9 });
+  expect(result.range).toEqual({ start: '2017-01-01', end: '2017-08-01' });
   expect(result.source.license).toBe('CC BY-NC-SA 4.0');
 });
 

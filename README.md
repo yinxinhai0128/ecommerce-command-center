@@ -1,3 +1,17 @@
+## Olist 真实数据试点
+
+除原有模拟演示外，应用提供本地、非商业的 Olist 匿名历史数据回放。完整操作、指标口径、限制与验证说明见 [docs/olist-pilot.md](docs/olist-pilot.md)。
+
+```powershell
+pnpm install
+pnpm data:olist:download
+pnpm data:olist:import
+pnpm data:olist:verify
+pnpm dev
+```
+
+数据保存在被 Git 忽略的 `var/olist`。来源为 [Olist Brazilian E-Commerce Public Dataset](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)，许可证为 CC BY-NC-SA 4.0；仅可按其非商业、署名与相同方式共享条件使用。未配置 `DEEPSEEK_API_KEY` 时，试点分析自动使用本地规则，不会阻止回放。
+
 # 经营驾驶舱
 
 一个用于演示电商经营数据的本地 React 应用。它包含两个一级模块：**实时监控** 与 **智能分析**。数据、商店、商品和客户均为模拟数据，不对应真实商家或客户。

@@ -5,11 +5,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApp } from '../../server/index';
 import { createPilotSchema, openPilotDatabase } from '../../server/pilot/database';
+import { importOlistDataset } from '../../server/pilot/importer';
 import { resolveOlistPaths } from '../../server/pilot/paths';
 import { DatabaseSync } from 'node:sqlite';
 
 const directories: string[] = [];
 const applications: Array<ReturnType<typeof createApp>> = [];
+const fixtureDir = join(process.cwd(), 'tests', 'fixtures', 'olist');
 
 afterEach(async () => {
   applications.splice(0).forEach((app) => (app as ReturnType<typeof createApp> & { dispose?: () => void }).dispose?.());
@@ -74,6 +76,19 @@ describe('Olist Pilot API', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ ready: false, importCommand: 'pnpm data:olist:import' });
+  });
+
+  test('真实夹具导入后返回客户端可验证的日历日期范围', async () => {
+    const dataDir = await temporaryDirectory();
+    await importOlistDataset({ sourceDir: fixtureDir, dataDir });
+
+    const response = await request(createPilotApp(dataDir)).get('/api/pilot/status');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      ready: true,
+      range: { start: '2017-01-01', end: '2017-08-01' },
+    });
   });
 
   test('导入清单存在但数据库不可用时返回稳定错误码', async () => {
