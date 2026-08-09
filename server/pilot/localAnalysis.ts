@@ -16,12 +16,15 @@ function classifyQuestion(question: string): QuestionKind {
   return 'general';
 }
 
-function contributorDimension(question: string): PilotAnalysisContext['contributors'][number]['dimension'] | undefined {
+type ContributorDimension = PilotAnalysisContext['contributors'][number]['dimension'];
+
+function contributorDimensions(question: string): ContributorDimension[] {
   const normalized = question.normalize('NFKC').toLowerCase().replace(/\s+/g, '');
-  if (/卖家|seller/.test(normalized)) return 'seller';
-  if (/品类|类目|类别|category/.test(normalized)) return 'category';
-  if (/地区|州|区域|state|region/.test(normalized)) return 'customerState';
-  return undefined;
+  const dimensions: ContributorDimension[] = [];
+  if (/品类|类目|类别|category/.test(normalized)) dimensions.push('category');
+  if (/卖家|seller/.test(normalized)) dimensions.push('seller');
+  if (/地区|州|区域|state|region/.test(normalized)) dimensions.push('customerState');
+  return dimensions;
 }
 
 function fact(context: PilotAnalysisContext, id: string) {
@@ -59,10 +62,18 @@ export function analyzeLocally(
   const deliveryDays = fact(context, 'averageDeliveryDays.value');
   const reviewScore = fact(context, 'averageReviewScore.value');
   const topContributor = context.contributors[0];
-  const requestedDimension = contributorDimension(question);
-  const relevantContributors = requestedDimension
-    ? context.contributors.filter(({ dimension }) => dimension === requestedDimension)
-    : context.contributors;
+  const requestedDimensions = contributorDimensions(question);
+  const relevantContributors = requestedDimensions.length === 0
+    ? context.contributors
+    : requestedDimensions.length === 1
+      ? context.contributors.filter(({ dimension }) => dimension === requestedDimensions[0])
+      : requestedDimensions
+        .map((dimension) => context.contributors.find((contributor) => contributor.dimension === dimension))
+        .filter((contributor): contributor is PilotAnalysisContext['contributors'][number] => contributor !== undefined)
+        .filter((contributor, index, contributors) => contributors.findIndex(({ label }) => label === contributor.label) === index)
+        .sort((left, right) => right.itemGmv - left.itemGmv
+          || left.dimension.localeCompare(right.dimension)
+          || left.label.localeCompare(right.label));
   const relevantTopContributor = relevantContributors[0];
 
   let result: Pick<AnalysisResult, 'summary' | 'signals' | 'causes' | 'risks' | 'actions' | 'followUps'>;
@@ -109,7 +120,9 @@ export function analyzeLocally(
     case 'contributors':
       result = {
         summary: relevantTopContributor
-          ? `主要贡献来自${relevantTopContributor.label}，成交额为 ${relevantTopContributor.itemGmv}。`
+          ? `主要贡献来自${(requestedDimensions.length > 1 ? relevantContributors : [relevantTopContributor])
+            .map((contributor) => `${contributor.label}，成交额为 ${contributor.itemGmv}`)
+            .join('；')}。`
           : '当前快照没有可用的贡献者排行。',
         signals: [{
           label: '主要贡献',

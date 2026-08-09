@@ -308,6 +308,39 @@ describe('Olist pilot trusted analysis', () => {
     expect(category.summary).not.toContain('地区：SP');
   });
 
+  test('品类和卖家问题同时返回两个被点名维度并排除地区', () => {
+    const result = analyzeLocally(buildPilotAnalysisContext(snapshot), '哪些品类和卖家贡献最大？', 'not_configured');
+
+    expect(result.summary).toContain('品类：books');
+    expect(result.summary).toContain('卖家：seller-1');
+    expect(result.summary).not.toContain('地区：SP');
+    expect(result.causes.map(({ label }) => label)).toEqual(['品类：books', '卖家：seller-1']);
+  });
+
+  test('地区贡献问题只返回地区维度', () => {
+    const result = analyzeLocally(buildPilotAnalysisContext(snapshot), '哪些地区贡献最大？', 'not_configured');
+
+    expect(result.summary).toContain('地区：SP');
+    expect(result.causes.map(({ label }) => label)).toEqual(['地区：SP']);
+  });
+
+  test('三维贡献问题各取对应 top 并按成交额稳定合并', () => {
+    const context = buildPilotAnalysisContext(snapshot);
+    const result = analyzeLocally(context, '哪些品类、卖家和地区贡献最大？', 'not_configured');
+    const generic = analyzeLocally(context, '哪些贡献者贡献最大？', 'not_configured');
+
+    expect(result.causes.map(({ label, contribution }) => ({ label, contribution }))).toEqual([
+      { label: '地区：SP', contribution: 350 },
+      { label: '品类：books', contribution: 300 },
+      { label: '卖家：seller-1', contribution: 250 },
+    ]);
+    expect(result.causes).toHaveLength(3);
+    expect(result.summary).toContain('地区：SP');
+    expect(result.summary).toContain('品类：books');
+    expect(result.summary).toContain('卖家：seller-1');
+    expect(generic.summary).toContain('地区：SP');
+  });
+
   test('DeepSeek 使用白名单数值时返回服务端分析', async () => {
     const fetchImpl = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify(modelResult(490)) } }],
