@@ -200,6 +200,47 @@ test('caps every module at the exact local replay timestamp', () => {
   expect(snapshot.recentOrders.map((order) => order.orderId)).toEqual(['exact', 'before']);
 });
 
+test('includes the requested end date through 23:59:59 before a later replay time', () => {
+  // Normalizing a requested end date to noon must fail this test.
+  const database = new DatabaseSync(':memory:');
+  databases.push(database);
+  createPilotSchema(database);
+  database.exec(`
+    INSERT INTO customers VALUES ('customer', 'unique', '01000', 'sao paulo', 'SP');
+    INSERT INTO sellers VALUES ('seller-1', '30000', 'belo horizonte', 'MG');
+    INSERT INTO products VALUES ('book', 'books', NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    INSERT INTO orders VALUES
+      ('before', 'customer', 'delivered', '2018-01-04 11:59:59', '2018-01-04 11:59:59', '2018-01-04 11:59:59', '2018-01-04 11:59:59', '2018-01-05 00:00:00'),
+      ('exact', 'customer', 'delivered', '2018-01-04 12:00:00', '2018-01-04 12:00:00', '2018-01-04 12:00:00', '2018-01-04 12:00:00', '2018-01-05 00:00:00'),
+      ('after', 'customer', 'delivered', '2018-01-04 12:00:01', '2018-01-04 12:00:01', '2018-01-04 12:00:01', '2018-01-04 12:00:01', '2018-01-05 00:00:00'),
+      ('day-end', 'customer', 'delivered', '2018-01-04 23:59:59', '2018-01-04 23:59:59', '2018-01-04 23:59:59', '2018-01-04 23:59:59', '2018-01-05 00:00:00'),
+      ('next-day', 'customer', 'delivered', '2018-01-05 00:00:00', '2018-01-05 00:00:00', '2018-01-05 00:00:00', '2018-01-05 00:00:00', '2018-01-06 00:00:00');
+    INSERT INTO order_items VALUES
+      ('before', 1, 'book', 'seller-1', '2018-01-04 11:59:59', 10, 0),
+      ('exact', 1, 'book', 'seller-1', '2018-01-04 12:00:00', 20, 0),
+      ('after', 1, 'book', 'seller-1', '2018-01-04 12:00:01', 30, 0),
+      ('day-end', 1, 'book', 'seller-1', '2018-01-04 23:59:59', 40, 0),
+      ('next-day', 1, 'book', 'seller-1', '2018-01-05 00:00:00', 50, 0);
+  `);
+
+  const snapshot = createPilotRepository(database).getSnapshot({ start: '2018-01-04', end: '2018-01-04', category: 'books' }, '2018-01-05 12:00:00');
+
+  expect(snapshot.kpis.itemGmv.value).toBe(100);
+  expect(snapshot.kpis.validOrderCount.value).toBe(4);
+  expect(snapshot.kpis.averageOrderValue.value).toBe(25);
+  expect(snapshot.dailyTrend).toEqual([{ date: '2018-01-04', itemGmv: 100, validOrderCount: 4 }]);
+  expect(snapshot.fulfillmentFunnel).toEqual([
+    { stage: 'purchased', value: 4 },
+    { stage: 'approved', value: 4 },
+    { stage: 'carrier', value: 4 },
+    { stage: 'delivered', value: 4 },
+  ]);
+  expect(snapshot.categoryRanking).toEqual([{ category: 'books', itemGmv: 100 }]);
+  expect(snapshot.sellerRanking).toEqual([{ sellerId: 'seller-1', itemGmv: 100 }]);
+  expect(snapshot.customerStateRanking).toEqual([{ customerState: 'SP', itemGmv: 100 }]);
+  expect(snapshot.recentOrders.map((order) => order.orderId)).toEqual(['day-end', 'after', 'exact', 'before']);
+});
+
 test('uses matching line-item GMV without duplicating filtered orders', () => {
   // Summing an unselected line item or counting its order twice must fail this test.
   const database = new DatabaseSync(':memory:');
