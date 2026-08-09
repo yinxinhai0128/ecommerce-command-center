@@ -89,3 +89,8 @@ export type PilotSnapshot = {
   recentOrders: Array<{ orderId: string; purchasedAt: string; status: string; itemGmv: number; itemCount: number; customerState: string }>;
   capabilities: PilotCapability[];
 };
+
+export type PilotReplayState = {
+  sourceLocalNow: string;
+  isRunning: boolean;
+};

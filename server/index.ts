@@ -2,13 +2,15 @@ import express, { type Express } from 'express';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { createAnalysisRouter, type AnalysisRouterOptions } from './analysis/route';
+import { createPilotRouter, type PilotRouterOptions } from './pilot/route';
 
-export type AppOptions = AnalysisRouterOptions;
+export type AppOptions = AnalysisRouterOptions & { pilot?: PilotRouterOptions };
 
 export function createApp(options: AppOptions = {}): Express {
   const app = express();
   app.use(express.json({ limit: '64kb' }));
   app.use('/api/analysis', createAnalysisRouter(options));
+  app.use('/api/pilot', createPilotRouter(options.pilot));
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: '未找到 API 路由' });
   });
