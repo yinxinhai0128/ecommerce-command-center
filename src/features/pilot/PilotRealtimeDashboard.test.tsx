@@ -25,3 +25,15 @@ test('一个排行为空时不隐藏其他排行', () => {
   expect(within(screen.getByRole('region', { name: '类目排行' })).getByText('暂无类目数据')).toBeInTheDocument();
   expect(within(screen.getByRole('region', { name: '卖家排行' })).getByText('seller-1')).toBeInTheDocument();
 });
+
+test('不展示数据源明确不支持的毛利能力占位', () => {
+  render(<PilotRealtimeDashboard snapshot={{
+    ...snapshot,
+    capabilities: [{ key: 'grossMarginRate', status: 'unavailable', reason: 'Olist 原始数据不包含成本或毛利事实。' }],
+  }} onClearFilters={() => undefined} />);
+
+  expect(screen.getAllByTestId('pilot-kpi')).toHaveLength(7);
+  expect(screen.queryByText('grossMarginRate')).not.toBeInTheDocument();
+  expect(screen.queryByText('Olist 原始数据不包含成本或毛利事实。')).not.toBeInTheDocument();
+  expect(screen.queryByText(/毛利/)).not.toBeInTheDocument();
+});

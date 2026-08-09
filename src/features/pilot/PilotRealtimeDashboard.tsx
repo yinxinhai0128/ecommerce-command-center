@@ -42,7 +42,7 @@ export function PilotRealtimeDashboard({ snapshot, onClearFilters }: PilotRealti
         <Ranking title="客户州排行" rows={snapshot.customerStateRanking.map((row) => ({ label: row.customerState, value: row.itemGmv }))} emptyText="暂无客户州数据" onClearFilters={onClearFilters} />
       </div>
       <Panel title="最近订单">{snapshot.recentOrders.length === 0 ? <p className="panel-empty">当前筛选条件下暂无订单数据</p> : <ul className="pilot-order-list">{snapshot.recentOrders.slice(0, 8).map((order) => <li key={order.orderId}><span>{order.orderId}</span><time dateTime={order.purchasedAt.replace(' ', 'T')}>{order.purchasedAt}</time><strong>¥{order.itemGmv.toLocaleString('zh-CN')}</strong><span>{order.status} · {order.itemCount} 件 · {order.customerState}</span></li>)}</ul>}</Panel>
-      <Panel title="数据能力边界"><ul className="pilot-capabilities">{snapshot.capabilities.map((capability) => <li key={capability.key}><strong>{capability.key}</strong><span>{capability.status === 'available' ? '可用' : capability.reason ?? '当前数据源不支持'}</span></li>)}</ul></Panel>
+      <Panel title="数据使用说明"><p className="panel-empty">本试点仅根据 Olist 的订单、履约与评价事实计算本页指标；未呈现的能力不作推断。</p></Panel>
     </div>
   );
 }
