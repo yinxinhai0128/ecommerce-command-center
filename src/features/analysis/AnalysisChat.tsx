@@ -1,14 +1,16 @@
 import { useState, type FormEvent, type JSX } from 'react';
-import type { AnalysisResult } from '../../domain/types';
 import { Panel } from '../../ui/Panel';
 
 export type AnalysisHistoryEntry = { id: number; question: string; summary: string };
 
 type AnalysisChatProps = {
-  result?: AnalysisResult;
+  result?: { followUps: string[] };
   loading: boolean;
   history: AnalysisHistoryEntry[];
   onQuestion: (question: string) => void;
+  questionLabel?: string;
+  submitLabel?: string;
+  canAskWithoutResult?: boolean;
 };
 
 const presets = [
@@ -17,9 +19,9 @@ const presets = [
   '接下来应该优先采取什么行动？',
 ];
 
-export function AnalysisChat({ result, loading, history, onQuestion }: AnalysisChatProps): JSX.Element {
+export function AnalysisChat({ result, loading, history, onQuestion, questionLabel = '自由提问', submitLabel = '发送问题', canAskWithoutResult = false }: AnalysisChatProps): JSX.Element {
   const [question, setQuestion] = useState('');
-  const disabled = loading || !result;
+  const disabled = loading || (!result && !canAskWithoutResult);
 
   function submit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -50,7 +52,7 @@ export function AnalysisChat({ result, loading, history, onQuestion }: AnalysisC
           ))}
         </div>
         <form className="analysis-question-form" onSubmit={submit}>
-          <label htmlFor="analysis-question">自由提问</label>
+          <label htmlFor="analysis-question">{questionLabel}</label>
           <textarea
             id="analysis-question"
             maxLength={500}
@@ -59,7 +61,7 @@ export function AnalysisChat({ result, loading, history, onQuestion }: AnalysisC
             onChange={(event) => setQuestion(event.target.value)}
             placeholder="输入一个经营问题"
           />
-          <button type="submit" disabled={disabled || !question.trim()}>发送问题</button>
+          <button type="submit" disabled={disabled || !question.trim()}>{submitLabel}</button>
         </form>
       </Panel>
     </div>

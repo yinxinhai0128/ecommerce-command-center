@@ -104,6 +104,19 @@ test('Panel 错误态提供重试操作', () => {
   expect(retry).toHaveBeenCalledOnce();
 });
 
+test('切换到隔离的真实数据试点时卸载模拟运行时', async () => {
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ready: false, importCommand: 'pnpm data:olist:import' }), { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+  render(<App />);
+
+  fireEvent.click(screen.getByRole('button', { name: '真实数据试点' }));
+
+  expect(await screen.findByText('真实匿名历史数据回放')).toBeInTheDocument();
+  expect(screen.queryByText('支付转化率')).not.toBeInTheDocument();
+  expect(screen.queryByText('毛利率')).not.toBeInTheDocument();
+  vi.unstubAllGlobals();
+});
+
 test('应用真实装配分析仪表盘且仅在首次激活时请求一次', async () => {
   const fetchMock = vi.fn(async () => new Response(JSON.stringify({
     summary: '经营结论已生成。',
