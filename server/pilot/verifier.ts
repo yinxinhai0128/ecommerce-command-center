@@ -21,6 +21,7 @@ export function verifyOlistDatabase(databasePath: string): OlistVerification {
         UNION ALL SELECT product_id FROM products GROUP BY product_id HAVING COUNT(*) > 1
         UNION ALL SELECT review_id FROM reviews GROUP BY review_id HAVING COUNT(*) > 1
         UNION ALL SELECT order_id || ':' || order_item_id FROM order_items GROUP BY order_id, order_item_id HAVING COUNT(*) > 1
+        UNION ALL SELECT category_name FROM category_translations GROUP BY category_name HAVING COUNT(*) > 1
       )
     `);
     const orphanReferences = value(database, `

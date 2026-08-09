@@ -21,8 +21,9 @@ export async function downloadOlistSource({ dataDir, fetchImpl = fetch }: Downlo
   const entries = unzipSync(archive);
   const selected = new Map<string, Uint8Array>();
   for (const [entry, contents] of Object.entries(entries)) {
-    if (entry.startsWith('/') || entry.split('/').includes('..')) throw new Error(`ZIP 包含不安全路径: ${entry}`);
-    const filename = basename(entry);
+    const normalizedEntry = entry.replace(/\\/g, '/');
+    if (normalizedEntry.startsWith('/') || /^[A-Za-z]:($|\/)/.test(normalizedEntry) || normalizedEntry.split('/').includes('..')) throw new Error(`ZIP 包含不安全路径: ${entry}`);
+    const filename = basename(normalizedEntry);
     if (requiredFiles.has(filename)) {
       if (selected.has(filename)) throw new Error(`ZIP 包含重复文件: ${filename}`);
       selected.set(filename, contents);
