@@ -46,7 +46,7 @@ test('rejects a successful response that is not a ZIP archive', async () => {
     .rejects.toThrow('不是非空 ZIP 文件');
 });
 
-test.each(['../olist_orders_dataset.csv', '..\\olist_orders_dataset.csv', '/olist_orders_dataset.csv', 'C:\\olist_orders_dataset.csv'])('rejects unsafe ZIP path %s', async (unsafePath) => {
+test.each(['../olist_orders_dataset.csv', '..\\olist_orders_dataset.csv', '/olist_orders_dataset.csv', 'C:\\olist_orders_dataset.csv', 'C:olist_orders_dataset.csv'])('rejects unsafe ZIP path %s', async (unsafePath) => {
   const entries = Object.fromEntries(requiredFiles.map((filename) => [filename, filename]));
   delete entries['olist_orders_dataset.csv'];
   entries[unsafePath] = 'unsafe';
