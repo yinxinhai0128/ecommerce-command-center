@@ -34,9 +34,14 @@ export function createApp(options: AppOptions = {}): App {
   });
   const application = Object.assign(app, { dispose: () => pilotRouter.dispose() }) as App;
   const listen = application.listen.bind(application);
+  const activeServers = new Set<ReturnType<typeof listen>>();
   application.listen = ((...args: Parameters<typeof listen>) => {
     const server = listen(...args);
-    server.once('close', application.dispose);
+    activeServers.add(server);
+    server.once('close', () => {
+      activeServers.delete(server);
+      if (activeServers.size === 0) application.dispose();
+    });
     return server;
   }) as typeof application.listen;
   return application;

@@ -159,4 +159,35 @@ describe('Olist Pilot API', () => {
     expect(clearInterval).toHaveBeenCalledOnce();
     expect(closeDatabase).toHaveBeenCalledOnce();
   });
+
+  test('同一应用的最后一个 HTTP listener 关闭时才释放 Pilot 资源', async () => {
+    const dataDir = await readyDataDirectory();
+    const clearInterval = vi.spyOn(globalThis, 'clearInterval');
+    const closeDatabase = vi.spyOn(DatabaseSync.prototype, 'close');
+    const app = createPilotApp(dataDir);
+    const listen = () => new Promise<ReturnType<typeof app.listen>>((resolve) => {
+      const server = app.listen(0, '127.0.0.1', () => resolve(server));
+    });
+    const serverA = await listen();
+    const serverB = await listen();
+    const address = (server: ReturnType<typeof app.listen>) => {
+      const value = server.address();
+      if (!value || typeof value === 'string') throw new Error('Expected TCP listener');
+      return `http://127.0.0.1:${value.port}`;
+    };
+
+    await request(address(serverA)).post('/api/pilot/replay').send({ action: 'start' }).expect(200);
+    await new Promise<void>((resolve, reject) => serverA.close((error) => error ? reject(error) : resolve()));
+
+    expect(clearInterval).not.toHaveBeenCalled();
+    expect(closeDatabase).not.toHaveBeenCalled();
+    await request(address(serverB)).get('/api/pilot/status').expect(200);
+
+    await new Promise<void>((resolve, reject) => serverB.close((error) => error ? reject(error) : resolve()));
+    app.dispose();
+    app.dispose();
+
+    expect(clearInterval).toHaveBeenCalledOnce();
+    expect(closeDatabase).toHaveBeenCalledOnce();
+  });
 });
