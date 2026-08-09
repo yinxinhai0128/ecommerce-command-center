@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { controlPilotReplay, requestPilotSnapshot, requestPilotStatus } from './pilotClient';
+import { controlPilotReplay, requestPilotAnalysis, requestPilotSnapshot, requestPilotStatus } from './pilotClient';
 
 const filters = { start: '2018-01-01', end: '2018-01-31', category: 'books' };
 
@@ -58,4 +58,24 @@ test('状态响应缺少已就绪回放状态时拒绝响应', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => response({ ready: true, range: { start: '2018-01-01', end: '2018-12-31' } })));
 
   await expect(requestPilotStatus()).rejects.toThrow('璇曠偣鏁版嵁鍝嶅簲鏃犳晥');
+});
+
+test.each([
+  ['不存在的筛选日期', { ...snapshot, filters: { ...filters, start: '2018-02-30' } }],
+  ['不存在的趋势日期', { ...snapshot, dailyTrend: [{ date: '2018-02-30', itemGmv: 490, validOrderCount: 1 }] }],
+  ['不存在的源本地时间', { ...snapshot, sourceLocalNow: '2018-02-30 25:00:00' }],
+  ['不存在的订单本地时间', { ...snapshot, recentOrders: [{ ...snapshot.recentOrders[0], purchasedAt: '2018-02-30 00:00:00' }] }],
+  ['无穷 KPI', { ...snapshot, kpis: { ...snapshot.kpis, itemGmv: { value: null, comparisonValue: 1, changeRate: 1 } } }],
+])('拒绝%s，避免日期或数值越过客户端边界', async (_name, invalid) => {
+  vi.stubGlobal('fetch', vi.fn(async () => response(invalid)));
+  await expect(requestPilotSnapshot(filters)).rejects.toThrow('璇曠偣鏁版嵁鍝嶅簲鏃犳晥');
+});
+
+test('拒绝无效 ISO 分析生成时间与嵌套元数据本地时间', async () => {
+  const validAnalysis = {
+    summary: 'ok', signals: [], causes: [], risks: [], actions: [], followUps: [], source: 'local',
+    generatedAt: '2018-02-30T00:00:00Z', metadata: { sourceLocalNow: '2018-02-30 00:00:00' },
+  };
+  vi.stubGlobal('fetch', vi.fn(async () => response(validAnalysis)));
+  await expect(requestPilotAnalysis(filters, '问题')).rejects.toThrow('璇曠偣鏁版嵁鍝嶅簲鏃犳晥');
 });
