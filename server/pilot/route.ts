@@ -1,14 +1,22 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { Router } from 'express';
+import { z } from 'zod';
+import type { FetchImplementation } from '../analysis/deepseekProvider';
+import { buildPilotAnalysisContext } from './analysisContext';
+import { requestPilotDeepSeekAnalysis } from './deepseekAnalysis';
+import { analyzeLocally } from './localAnalysis';
 import { createPilotRepository } from './repository';
 import { openPilotDatabase } from './database';
 import { resolveOlistPaths } from './paths';
 import { createReplayController, type PilotReplayController, type ReplayStateStore } from './replay';
 import { ensureReplayStateSchema, MAX_DATE_RANGE_DAYS, replayActionSchema, snapshotQuerySchema } from './schema';
-import type { OlistManifest, PilotReplayState } from './contracts';
+import type { OlistManifest, PilotFilterOptions, PilotReplayState } from './contracts';
 
 export type PilotRouterOptions = {
   dataDir?: string;
+  fetchImpl?: FetchImplementation;
+  env?: Record<string, string | undefined>;
+  now?: () => Date;
 };
 
 type PilotService = {
@@ -23,6 +31,26 @@ function rangeDays(start: string, end: string) {
   const [startYear, startMonth, startDay] = start.split('-').map(Number);
   const [endYear, endMonth, endDay] = end.split('-').map(Number);
   return (Date.UTC(endYear, endMonth - 1, endDay) - Date.UTC(startYear, startMonth - 1, startDay)) / 86_400_000 + 1;
+}
+
+const analysisRequestSchema = z.object({
+  question: z.string().trim().min(1).max(500),
+  filters: z.object({
+    start: z.iso.date(),
+    end: z.iso.date(),
+    category: z.string().trim().min(1).max(200).optional(),
+    sellerId: z.string().trim().min(1).max(200).optional(),
+    customerState: z.string().trim().min(1).max(200).optional(),
+  }).strict(),
+}).strict();
+
+function filtersExist(
+  filters: z.infer<typeof analysisRequestSchema>['filters'],
+  options: PilotFilterOptions,
+) {
+  return (!filters.category || options.categories.includes(filters.category))
+    && (!filters.sellerId || options.sellerIds.includes(filters.sellerId))
+    && (!filters.customerState || options.customerStates.includes(filters.customerState));
 }
 
 function loadManifest(dataDir: string): OlistManifest | undefined {
@@ -56,6 +84,9 @@ function replayStore(database: ReturnType<typeof openPilotDatabase>): ReplayStat
 export function createPilotRouter(options: PilotRouterOptions = {}): PilotRouter {
   const router = Router();
   const dataDir = options.dataDir ?? 'var/olist';
+  const fetchImpl = options.fetchImpl ?? ((url: string, init?: RequestInit) => fetch(url, init));
+  const env = options.env ?? process.env;
+  const now = options.now ?? (() => new Date());
   let service: PilotService | undefined;
 
   const getService = () => {
@@ -123,6 +154,54 @@ export function createPilotRouter(options: PilotRouterOptions = {}): PilotRouter
         return;
       }
       res.json(current.repository.getFilterOptions());
+    } catch {
+      res.status(503).json({ error: 'PILOT_DATABASE_UNAVAILABLE' });
+    }
+  });
+
+  router.post('/analysis', async (req, res) => {
+    const parsed = analysisRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'INVALID_QUERY' });
+      return;
+    }
+    const { filters, question } = parsed.data;
+    if (filters.start > filters.end || rangeDays(filters.start, filters.end) > MAX_DATE_RANGE_DAYS) {
+      res.status(400).json({ error: 'INVALID_DATE_RANGE' });
+      return;
+    }
+
+    try {
+      const current = getService();
+      if (!current) {
+        res.status(503).json({ error: 'PILOT_NOT_READY' });
+        return;
+      }
+      if (!filtersExist(filters, current.repository.getFilterOptions())) {
+        res.status(400).json({ error: 'INVALID_QUERY' });
+        return;
+      }
+
+      const replayNow = current.replay.getState().sourceLocalNow;
+      const snapshot = current.repository.getSnapshot(filters, replayNow);
+      const context = buildPilotAnalysisContext(snapshot, question);
+      const metadata = { sourceLocalNow: snapshot.sourceLocalNow };
+      const apiKey = env.DEEPSEEK_API_KEY;
+      if (!apiKey) {
+        res.json({ ...analyzeLocally(context, question, 'not_configured', now), metadata });
+        return;
+      }
+
+      const outcome = await requestPilotDeepSeekAnalysis({
+        fetchImpl,
+        apiKey,
+        model: env.DEEPSEEK_MODEL,
+        context,
+        now,
+      });
+      res.json('analysis' in outcome
+        ? { ...outcome.analysis, metadata }
+        : { ...analyzeLocally(context, question, outcome.fallbackReason, now), metadata });
     } catch {
       res.status(503).json({ error: 'PILOT_DATABASE_UNAVAILABLE' });
     }

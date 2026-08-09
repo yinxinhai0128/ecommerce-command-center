@@ -1,3 +1,5 @@
+import type { AnalysisResult } from '../../src/domain/types';
+
 export type OlistManifest = {
   ready: true;
   importedAt: string;
@@ -93,4 +95,20 @@ export type PilotSnapshot = {
 export type PilotReplayState = {
   sourceLocalNow: string;
   isRunning: boolean;
+};
+
+export type PilotAnalysisUnit = 'currency' | 'count' | 'ratio' | 'days' | 'score';
+
+export type PilotAnalysisContext = {
+  question?: string;
+  sourceLocalNow: string;
+  filters: PilotFilters;
+  comparisonLabel: string;
+  facts: Array<{ id: string; label: string; value: number; unit: PilotAnalysisUnit }>;
+  trendChanges: Array<{ id: string; label: string; value: number; unit: 'currency' | 'count' | 'ratio' }>;
+  contributors: Array<{ id: string; dimension: 'category' | 'seller' | 'customerState'; label: string; itemGmv: number }>;
+};
+
+export type PilotAnalysisResponse = AnalysisResult & {
+  metadata: { sourceLocalNow: string };
 };

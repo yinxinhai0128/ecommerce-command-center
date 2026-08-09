@@ -11,7 +11,12 @@ export function createApp(options: AppOptions = {}): App {
   const app = express();
   app.use(express.json({ limit: '64kb' }));
   app.use('/api/analysis', createAnalysisRouter(options));
-  const pilotRouter = createPilotRouter(options.pilot);
+  const pilotRouter = createPilotRouter({
+    fetchImpl: options.fetchImpl,
+    env: options.env,
+    now: options.now,
+    ...options.pilot,
+  });
   app.use('/api/pilot', pilotRouter);
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: '未找到 API 路由' });
