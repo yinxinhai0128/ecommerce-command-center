@@ -151,3 +151,28 @@ test('卸载会取消分析请求；即使旧请求忽略取消并随后返回�
   resolveAnalysis(response({ summary: 'ok', signals: [], causes: [], risks: [], actions: [], followUps: [], source: 'local', generatedAt: '2018-01-31T00:00:00Z', metadata: { sourceLocalNow: '2018-01-31 00:00:00' } }));
   await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
 });
+
+test('回放变更进行中跳过轮询，并在最新服务器回放状态后只刷新一次', async () => {
+  let resolveReplay: (value: Response) => void = () => undefined;
+  let isRunning = true;
+  const fetchMock = vi.fn((url: RequestInfo | URL) => {
+    const path = String(url);
+    if (path === '/api/pilot/status') return Promise.resolve(response({ ready: true, range: filters, replay: { sourceLocalNow: '2018-01-31 00:00:00', isRunning } }));
+    if (path === '/api/pilot/filter-options') return Promise.resolve(response({ categories: [], sellerIds: [], customerStates: [] }));
+    if (path.startsWith('/api/pilot/snapshot')) return Promise.resolve(response(snapshot));
+    if (path === '/api/pilot/replay') return new Promise<Response>((resolve) => { resolveReplay = resolve; });
+    throw new Error(`unexpected ${path}`);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  render(<PilotDashboardProvider><Probe /></PilotDashboardProvider>);
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+  screen.getByRole('button', { name: '暂停回放' }).click();
+  const pendingCalls = fetchMock.mock.calls.length;
+  await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+  expect(fetchMock.mock.calls.length).toBe(pendingCalls);
+  isRunning = false;
+  resolveReplay(response({ sourceLocalNow: '2018-01-31 12:00:00', isRunning: false }));
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+  expect(screen.getByText('已暂停')).toBeInTheDocument();
+  expect(fetchMock.mock.calls.length).toBe(pendingCalls + 2);
+});

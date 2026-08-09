@@ -29,7 +29,9 @@ export function PilotDashboardProvider({ children }: { children: ReactNode }): R
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const mounted = useRef(false);
-  const generation = useRef(0);
+  const refreshGeneration = useRef(0);
+  const replayMutationGeneration = useRef(0);
+  const mutationInFlight = useRef(false);
   const analysisGeneration = useRef(0);
   const needsInitialization = useRef(false);
   const filtersRef = useRef<PilotFilters | null>(null);
@@ -40,11 +42,12 @@ export function PilotDashboardProvider({ children }: { children: ReactNode }): R
   const refreshRef = useRef<(loadOptions: boolean) => void>(() => undefined);
 
   const refresh = useCallback((loadOptions: boolean) => {
+    if (mutationInFlight.current) return;
     requestController.current?.abort();
     const controller = new AbortController();
     requestController.current = controller;
-    const requestGeneration = ++generation.current;
-    const current = () => mounted.current && requestGeneration === generation.current && requestController.current === controller;
+    const requestGeneration = ++refreshGeneration.current;
+    const current = () => mounted.current && requestGeneration === refreshGeneration.current && requestController.current === controller && !mutationInFlight.current;
     setIsLoading(true);
     setError(null);
     void (async () => {
@@ -89,7 +92,8 @@ export function PilotDashboardProvider({ children }: { children: ReactNode }): R
     const timer = window.setInterval(() => refreshRef.current(false), 3000);
     return () => {
       mounted.current = false;
-      generation.current += 1;
+      refreshGeneration.current += 1;
+      replayMutationGeneration.current += 1;
       analysisGeneration.current += 1;
       window.clearInterval(timer);
       requestController.current?.abort();
@@ -106,18 +110,23 @@ export function PilotDashboardProvider({ children }: { children: ReactNode }): R
   const retry = useCallback(() => refreshRef.current(true), []);
   const replay = useCallback(async (action: PilotReplayAction) => {
     requestController.current?.abort();
-    const requestGeneration = ++generation.current;
+    refreshGeneration.current += 1;
     replayController.current?.abort();
     const controller = new AbortController();
     replayController.current = controller;
+    const mutationGeneration = ++replayMutationGeneration.current;
+    mutationInFlight.current = true;
     try {
       const nextReplay = await controlPilotReplay(action, controller.signal);
-      if (!mounted.current || requestGeneration !== generation.current || replayController.current !== controller) return;
+      if (!mounted.current || mutationGeneration !== replayMutationGeneration.current || replayController.current !== controller) return;
       setStatus((current) => current?.ready ? { ...current, replay: nextReplay } : current);
       setError(null);
+      mutationInFlight.current = false;
       refreshRef.current(false);
     } catch (cause) {
-      if (mounted.current && requestGeneration === generation.current && !isAbortError(cause)) setError(cause instanceof Error ? cause : new Error('璇曠偣鍥炴斁鎿嶄綔澶辫触'));
+      if (mounted.current && mutationGeneration === replayMutationGeneration.current && !isAbortError(cause)) setError(cause instanceof Error ? cause : new Error('璇曠偣鍥炴斁鎿嶄綔澶辫触'));
+    } finally {
+      if (mutationGeneration === replayMutationGeneration.current) mutationInFlight.current = false;
     }
   }, []);
   const requestAnalysis = useCallback(async (question: string) => {
