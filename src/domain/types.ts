@@ -117,7 +117,7 @@ export type DashboardSnapshot = {
   salesTrend: Array<{ at: Date; gmv: number; orderCount: number; target: number }>;
   recentOrders: Array<{ id: string; platform: Platform; amount: number; status: Order['status']; at: Date }>;
   funnel: Array<{ stage: 'visitors' | 'productViewers' | 'addToCartUsers' | 'checkoutUsers' | 'paidBuyers'; value: number }>;
-  channelRanking: Array<{ platform: Platform; gmv: number }>;
+  channelRanking: Array<{ channel: Campaign['channel']; attributedRevenue: number; spend: number }>;
   productRanking: Array<{ productId: string; name: string; gmv: number }>;
   regionRanking: Array<{ region: string; gmv: number }>;
   inventoryRisks: Array<{ productId: string; name: string; stock: number; dailySales: number; daysAvailable: number }>;
@@ -147,7 +147,7 @@ export type AnalysisContext = {
   comparisonLabel: string;
   kpis: DashboardSnapshot['kpis'];
   topContributors: {
-    channels: Array<{ label: string; value: number }>;
+    channels: Array<{ label: string; attributedRevenue: number; spend: number }>;
     products: Array<{ label: string; value: number }>;
     regions: Array<{ label: string; value: number }>;
   };

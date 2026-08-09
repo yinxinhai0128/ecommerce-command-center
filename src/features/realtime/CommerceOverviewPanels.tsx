@@ -12,7 +12,7 @@ const stageLabels: Record<DashboardSnapshot['funnel'][number]['stage'], string> 
 const emptyState = <p className="panel-empty">当前筛选条件下暂无数据</p>;
 
 export function CommerceOverviewPanels({ snapshot }: { snapshot: DashboardSnapshot }): JSX.Element {
-  const channelTotal = snapshot.channelRanking.reduce((total, item) => total + item.gmv, 0);
+  const channelTotal = snapshot.channelRanking.reduce((total, item) => total + item.attributedRevenue, 0);
   const channelMaximum = Math.max(channelTotal, 1);
 
   return (
@@ -30,11 +30,14 @@ export function CommerceOverviewPanels({ snapshot }: { snapshot: DashboardSnapsh
         {snapshot.channelRanking.length === 0 ? emptyState : (
           <ul className="channel-list">
             {snapshot.channelRanking.map((item) => (
-              <li key={item.platform}>
-                <span>{item.platform}</span>
-                <strong>¥{item.gmv.toLocaleString('zh-CN')}</strong>
-                <span className="channel-meter" role="meter" aria-label={`${item.platform}渠道贡献`} aria-valuemin={0} aria-valuemax={channelMaximum} aria-valuenow={item.gmv}>
-                  <i style={{ width: `${item.gmv / channelMaximum * 100}%` }} />
+              <li key={item.channel}>
+                <span>{item.channel}</span>
+                <span className="channel-financials">
+                  <strong>归因收入 ¥{item.attributedRevenue.toLocaleString('zh-CN')}</strong>
+                  <small>花费 ¥{item.spend.toLocaleString('zh-CN')}</small>
+                </span>
+                <span className="channel-meter" role="meter" aria-label={`${item.channel}归因收入`} aria-valuemin={0} aria-valuemax={channelMaximum} aria-valuenow={item.attributedRevenue}>
+                  <i style={{ width: `${item.attributedRevenue / channelMaximum * 100}%` }} />
                 </span>
               </li>
             ))}

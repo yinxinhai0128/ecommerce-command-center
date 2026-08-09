@@ -132,23 +132,25 @@ export function generateDataset(seed: number, now: Date): CommerceDataset {
       }
     }
 
-    for (let index = 0; index < platforms.length; index += 1) {
-      const visitors = 1400 + Math.floor(random() * 1600);
-      const productViewers = Math.floor(visitors * (0.45 + random() * 0.2));
-      const addToCartUsers = Math.floor(productViewers * (0.2 + random() * 0.15));
-      const checkoutUsers = Math.floor(addToCartUsers * (0.5 + random() * 0.2));
-      const paidBuyers = Math.floor(checkoutUsers * (0.55 + random() * 0.2));
-      traffic.push({
-        at: new Date(Math.min(dayStart + 12 * 60 * 60 * 1000, now.getTime())),
-        platform: platforms[index],
-        storeId: stores[index].id,
-        categoryId: categories[index % categories.length].id,
-        visitors,
-        productViewers,
-        addToCartUsers,
-        checkoutUsers,
-        paidBuyers,
-      });
+    for (let platformIndex = 0; platformIndex < platforms.length; platformIndex += 1) {
+      for (const category of categories) {
+        const visitors = 230 + Math.floor(random() * 270);
+        const productViewers = Math.floor(visitors * (0.45 + random() * 0.2));
+        const addToCartUsers = Math.floor(productViewers * (0.2 + random() * 0.15));
+        const checkoutUsers = Math.floor(addToCartUsers * (0.5 + random() * 0.2));
+        const paidBuyers = Math.floor(checkoutUsers * (0.55 + random() * 0.2));
+        traffic.push({
+          at: new Date(Math.min(dayStart + 12 * 60 * 60 * 1000, now.getTime())),
+          platform: platforms[platformIndex],
+          storeId: stores[platformIndex].id,
+          categoryId: category.id,
+          visitors,
+          productViewers,
+          addToCartUsers,
+          checkoutUsers,
+          paidBuyers,
+        });
+      }
     }
 
     addTargets(targets, dateKey(new Date(dayStart)), Math.round(dayGmv * (0.9 + random() * 0.2)), platforms, stores, categories);

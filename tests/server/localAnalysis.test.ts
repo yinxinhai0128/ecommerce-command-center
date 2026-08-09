@@ -17,7 +17,7 @@ const context = {
   },
   topContributors: {
     products: [{ label: '商品A', value: 12_000 }],
-    channels: [{ label: '平台A', value: 10_000 }],
+    channels: [{ label: '信息流', attributedRevenue: 10_000, spend: 3_000 }],
     regions: [{ label: '区域A', value: 8_000 }],
   },
   alerts: [],
@@ -30,7 +30,7 @@ test('无告警的本地分析以真实首要贡献项生成变化归因', () =>
 
   expect(result.causes).toEqual([
     expect.objectContaining({ label: '商品A', contribution: 12_000 }),
-    expect.objectContaining({ label: '平台A', contribution: 10_000 }),
+    expect.objectContaining({ label: '信息流', contribution: 10_000 }),
     expect.objectContaining({ label: '区域A', contribution: 8_000 }),
   ]);
   expect(result.causes.every((cause) => cause.evidence.length > 0)).toBe(true);

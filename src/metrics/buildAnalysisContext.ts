@@ -22,7 +22,7 @@ export function buildAnalysisContext(
     comparisonLabel: truncateContextText(snapshot.comparisonLabel),
     kpis: snapshot.kpis,
     topContributors: {
-      channels: snapshot.channelRanking.slice(0, 4).map(({ platform, gmv }) => ({ label: platform, value: gmv })),
+      channels: snapshot.channelRanking.slice(0, 4).map(({ channel, attributedRevenue, spend }) => ({ label: channel, attributedRevenue, spend })),
       products: snapshot.productRanking.slice(0, 5).map(({ name, gmv }) => ({ label: truncateContextText(name), value: gmv })),
       regions: snapshot.regionRanking.slice(0, 4).map(({ region, gmv }) => ({ label: truncateContextText(region), value: gmv })),
     },

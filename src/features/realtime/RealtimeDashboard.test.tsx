@@ -83,8 +83,8 @@ test('经营概览呈现五阶段转化漏斗和真实渠道贡献', () => {
       { stage: 'paidBuyers', value: 19 },
     ],
     channelRanking: [
-      { platform: '天猫', gmv: 8000 },
-      { platform: '京东', gmv: 2000 },
+      { channel: '信息流', attributedRevenue: 8000, spend: 2400 },
+      { channel: '搜索', attributedRevenue: 2000, spend: 1200 },
     ],
   }} alerts={alerts} isRunning />);
 
@@ -96,26 +96,29 @@ test('经营概览呈现五阶段转化漏斗和真实渠道贡献', () => {
     expect(item.getByText(value)).toBeInTheDocument();
   }
   const channels = within(overview.getByRole('region', { name: '渠道贡献' }));
-  expect(channels.getByText('天猫')).toBeInTheDocument();
-  expect(channels.getByText('¥8,000')).toBeInTheDocument();
-  expect(channels.getByText('京东')).toBeInTheDocument();
-  expect(channels.getByText('¥2,000')).toBeInTheDocument();
-  expect(channels.getByRole('meter', { name: '天猫渠道贡献' })).toHaveAttribute('aria-valuenow', '8000');
-  expect(channels.getByRole('meter', { name: '天猫渠道贡献' })).toHaveAttribute('aria-valuemax', '10000');
+  expect(channels.getByText('信息流')).toBeInTheDocument();
+  expect(channels.getByText('归因收入 ¥8,000')).toBeInTheDocument();
+  expect(channels.getByText('花费 ¥2,400')).toBeInTheDocument();
+  expect(channels.getByText('搜索')).toBeInTheDocument();
+  expect(channels.getByText('归因收入 ¥2,000')).toBeInTheDocument();
+  expect(channels.getByText('花费 ¥1,200')).toBeInTheDocument();
+  expect(channels.getByRole('meter', { name: '信息流归因收入' })).toHaveAttribute('aria-valuenow', '8000');
+  expect(channels.getByRole('meter', { name: '信息流归因收入' })).toHaveAttribute('aria-valuemax', '10000');
 });
 
 test('仅漏斗为空时只在漏斗显示空态且渠道保留真实值', () => {
   render(<RealtimeDashboard snapshot={{
     ...snapshot,
-    channelRanking: [{ platform: '天猫', gmv: 8000 }],
+    channelRanking: [{ channel: '信息流', attributedRevenue: 8000, spend: 2400 }],
   }} alerts={alerts} isRunning />);
 
   const funnel = within(screen.getByRole('region', { name: '转化漏斗' }));
   const channels = within(screen.getByRole('region', { name: '渠道贡献' }));
   expect(funnel.getByText('当前筛选条件下暂无数据')).toBeInTheDocument();
   expect(channels.queryByText('当前筛选条件下暂无数据')).not.toBeInTheDocument();
-  expect(channels.getByText('天猫')).toBeInTheDocument();
-  expect(channels.getByText('¥8,000')).toBeInTheDocument();
+  expect(channels.getByText('信息流')).toBeInTheDocument();
+  expect(channels.getByText('归因收入 ¥8,000')).toBeInTheDocument();
+  expect(channels.getByText('花费 ¥2,400')).toBeInTheDocument();
 });
 
 test('仅渠道为空时只在渠道显示空态且漏斗保留真实值', () => {

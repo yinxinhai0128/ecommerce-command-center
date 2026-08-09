@@ -12,6 +12,27 @@ test('相同种子与时间生成完全一致且覆盖四个平台', () => {
   expect(a.orders.length).toBeGreaterThan(5000);
 });
 
+test('每个自然日覆盖全部 24 个平台与类目流量原子', () => {
+  const dataset = generateDataset(20260808, new Date('2026-08-08T10:00:00+08:00'));
+  const trafficByDate = new Map<string, typeof dataset.traffic>();
+  for (const record of dataset.traffic) {
+    const date = record.at.toLocaleDateString('en-CA');
+    trafficByDate.set(date, [...(trafficByDate.get(date) ?? []), record]);
+  }
+
+  expect(trafficByDate.size).toBe(90);
+  for (const records of trafficByDate.values()) {
+    expect(records).toHaveLength(24);
+    expect(new Set(records.map((record) => `${record.platform}/${record.categoryId}`)).size).toBe(24);
+    expect(records.every((record) => (
+      record.visitors >= record.productViewers
+      && record.productViewers >= record.addToCartUsers
+      && record.addToCartUsers >= record.checkoutUsers
+      && record.checkoutUsers >= record.paidBuyers
+    ))).toBe(true);
+  }
+});
+
 test('凌晨生成的今日订单覆盖已发生的多个分钟且不晚于当前时间', () => {
   const now = new Date('2026-08-08T04:30:00+08:00');
   const todayOrders = generateDataset(20260808, now).orders.filter((order) => order.createdAt.toDateString() === now.toDateString());

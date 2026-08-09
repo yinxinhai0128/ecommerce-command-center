@@ -18,7 +18,7 @@ const snapshot: DashboardSnapshot = {
   salesTrend: [],
   recentOrders: [],
   funnel: [],
-  channelRanking: [{ platform: '天猫', gmv: 82000 }],
+  channelRanking: [{ channel: '信息流', attributedRevenue: 82000, spend: 24000 }],
   productRanking: [{ productId: 'sku-1', name: '云感外套', gmv: 48000 }],
   regionRanking: [{ region: '华东', gmv: 65000 }],
   inventoryRisks: [],
@@ -33,7 +33,7 @@ const snapshot: DashboardSnapshot = {
 const changedSnapshot: DashboardSnapshot = {
   ...snapshot,
   kpis: { ...snapshot.kpis, gmv: { value: 130000, comparisonValue: 112000, changeRate: 0.1607 } },
-  channelRanking: [{ platform: '京东', gmv: 90000 }],
+  channelRanking: [{ channel: '搜索', attributedRevenue: 90000, spend: 27000 }],
 };
 
 const alerts: DashboardAlert[] = [{
@@ -118,7 +118,7 @@ describe('智能分析生命周期', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     const latestBody = JSON.parse(fetchMock.mock.calls[1][1]?.body as string);
     expect(latestBody.kpis.gmv.value).toBe(130000);
-    expect(latestBody.topContributors.channels[0]).toEqual({ label: '京东', value: 90000 });
+    expect(latestBody.topContributors.channels[0]).toEqual({ label: '搜索', attributedRevenue: 90000, spend: 27000 });
   });
 
   test('数据变化后预测保持已分析版本并在重新分析成功时原子切换', async () => {

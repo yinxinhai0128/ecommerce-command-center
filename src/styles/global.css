@@ -239,6 +239,9 @@ select:focus-visible {
 .channel-list { display: grid; gap: 8px; max-height: 128px; overflow-y: auto; }
 .channel-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; font-size: 12px; }
 .channel-list strong { font-weight: 500; }
+.channel-financials { text-align: right; }
+.channel-financials strong, .channel-financials small { display: block; }
+.channel-financials small { margin-top: 2px; color: var(--text-muted); font-size: 10px; }
 .channel-meter { grid-column: span 2; height: 5px; overflow: hidden; background: var(--bg-app); }
 .channel-meter i { display: block; height: 100%; background: var(--accent); }
 .alert-list { display: grid; gap: 8px; }

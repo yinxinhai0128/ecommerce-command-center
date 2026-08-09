@@ -23,7 +23,7 @@ const validContext = {
     targetAchievementRate: { value: 0.9, comparisonValue: 1, changeRate: -0.1 },
   },
   topContributors: {
-    channels: [{ label: '天猫', value: 72000 }],
+    channels: [{ label: '信息流', attributedRevenue: 72000, spend: 18000 }],
     products: [{ label: '经典外套', value: 45000 }],
     regions: [{ label: '华东', value: 60000 }],
   },

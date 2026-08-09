@@ -5,7 +5,6 @@ import type {
   Kpi,
   Order,
   OrderItem,
-  Platform,
   Target,
   TrafficRecord,
 } from '../domain/types';
@@ -39,6 +38,13 @@ function matchesTrafficFilters(record: TrafficRecord, filters: DashboardFilters)
   return (!filters.platform || record.platform === filters.platform)
     && (!filters.storeId || record.storeId === filters.storeId)
     && (!filters.categoryId || record.categoryId === filters.categoryId);
+}
+
+function matchesCampaignFilters(campaign: CommerceDataset['campaigns'][number], filters: DashboardFilters): boolean {
+  return campaign.startAt <= filters.end
+    && campaign.endAt >= filters.start
+    && (!filters.platform || campaign.platform === filters.platform)
+    && (!filters.storeId || campaign.storeId === filters.storeId);
 }
 
 function itemAmount(items: OrderItem[]): number {
@@ -251,7 +257,6 @@ export function calculateSnapshot(dataset: CommerceDataset, filters: DashboardFi
   const totalTraffic = (field: keyof Pick<TrafficRecord, 'visitors' | 'productViewers' | 'addToCartUsers' | 'checkoutUsers' | 'paidBuyers'>): number => (
     traffic.reduce((total, record) => total + record[field], 0)
   );
-  const gmvByPlatform = new Map<Platform, number>();
   const gmvByProduct = new Map<string, number>();
   const gmvByRegion = new Map<string, number>();
   const storesById = new Map(dataset.stores.map((store) => [store.id, store]));
@@ -259,7 +264,6 @@ export function calculateSnapshot(dataset: CommerceDataset, filters: DashboardFi
   for (const order of orders) {
     const items = itemsByOrder.get(order.id) ?? [];
     const amount = allocatedOrderGmv(order, items, filters);
-    gmvByPlatform.set(order.platform, (gmvByPlatform.get(order.platform) ?? 0) + amount);
     const region = storesById.get(order.storeId)?.region ?? '未知';
     gmvByRegion.set(region, (gmvByRegion.get(region) ?? 0) + amount);
     for (const item of filteredOrderItems(items, filters)) {
@@ -286,6 +290,15 @@ export function calculateSnapshot(dataset: CommerceDataset, filters: DashboardFi
   const futureTarget = selectTargets(dataset, filters)
     .filter((target) => forecast7d.some((forecast) => forecast.date === target.date))
     .reduce((total, target) => total + target.gmv, 0);
+  const channels = new Map<CommerceDataset['campaigns'][number]['channel'], { attributedRevenue: number; spend: number }>();
+  if (!filters.categoryId) {
+    for (const campaign of dataset.campaigns.filter((item) => matchesCampaignFilters(item, filters))) {
+      const totals = channels.get(campaign.channel) ?? { attributedRevenue: 0, spend: 0 };
+      totals.attributedRevenue += campaign.attributedRevenue;
+      totals.spend += campaign.spend;
+      channels.set(campaign.channel, totals);
+    }
+  }
 
   return {
     comparisonLabel: comparison.label,
@@ -311,9 +324,9 @@ export function calculateSnapshot(dataset: CommerceDataset, filters: DashboardFi
       { stage: 'checkoutUsers', value: totalTraffic('checkoutUsers') },
       { stage: 'paidBuyers', value: totalTraffic('paidBuyers') },
     ],
-    channelRanking: [...gmvByPlatform.entries()]
-      .map(([platform, gmv]) => ({ platform, gmv }))
-      .sort((a, b) => b.gmv - a.gmv),
+    channelRanking: [...channels.entries()]
+      .map(([channel, totals]) => ({ channel, ...totals }))
+      .sort((a, b) => b.attributedRevenue - a.attributedRevenue),
     productRanking: [...gmvByProduct.entries()]
       .map(([productId, gmv]) => ({ productId, name: productsById.get(productId)?.name ?? productId, gmv }))
       .sort((a, b) => b.gmv - a.gmv),

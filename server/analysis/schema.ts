@@ -45,7 +45,7 @@ export const analysisRequestSchema = z.object({
     targetAchievementRate: kpiSchema,
   }).strict(),
   topContributors: z.object({
-    channels: z.array(z.object({ label: text, value: finiteNumber }).strict()).max(50),
+    channels: z.array(z.object({ label: text, attributedRevenue: finiteNumber, spend: finiteNumber }).strict()).max(50),
     products: z.array(z.object({ label: text, value: finiteNumber }).strict()).max(50),
     regions: z.array(z.object({ label: text, value: finiteNumber }).strict()).max(50),
   }).strict(),

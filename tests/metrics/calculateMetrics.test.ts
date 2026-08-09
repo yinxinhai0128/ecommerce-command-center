@@ -1,4 +1,5 @@
 import { calculateSnapshot } from '../../src/metrics/calculateMetrics';
+import { generateDataset } from '../../src/data/generateDataset';
 import type { CommerceDataset, DashboardFilters } from '../../src/domain/types';
 
 const now = new Date('2026-08-08T23:59:59+08:00');
@@ -86,7 +87,7 @@ test('按指定口径汇总两笔已支付订单', () => {
     { stage: 'checkoutUsers', value: 30 },
     { stage: 'paidBuyers', value: 10 },
   ]);
-  expect(snapshot.channelRanking[0]).toEqual({ platform: '京东', gmv: 200 });
+  expect(snapshot.channelRanking).toEqual([]);
   expect(snapshot.productRanking[0]).toEqual({ productId: 'product-2', name: '商品二', gmv: 200 });
   expect(snapshot.regionRanking[0]).toEqual({ region: '华南', gmv: 200 });
   expect(snapshot.inventoryRisks[0].productId).toBe('product-1');
@@ -175,6 +176,45 @@ test('类目筛选只保留匹配明细的订单与流量', () => {
   expect(snapshot.kpis.conversionRate.value).toBe(0.01);
 });
 
+test('平台与类目组合有支付订单时使用同口径流量计算转化率', () => {
+  const generatedNow = new Date('2026-08-08T23:59:59+08:00');
+  const snapshot = calculateSnapshot(generateDataset(20260808, generatedNow), {
+    start: new Date('2026-05-11T00:00:00+08:00'),
+    end: generatedNow,
+    platform: '天猫',
+    categoryId: 'category-2',
+  }, generatedNow);
+
+  expect(snapshot.kpis.orderCount.value).toBeGreaterThan(0);
+  expect(snapshot.funnel.find(({ stage }) => stage === 'visitors')?.value).toBeGreaterThan(0);
+  expect(snapshot.kpis.conversionRate.value).toBeGreaterThan(0);
+});
+
+test('渠道排行按活动 campaign.channel 聚合归因收入与花费并响应平台筛选', () => {
+  const campaignDataset: CommerceDataset = {
+    ...dataset,
+    campaigns: [
+      { id: 'feed-1', platform: '天猫', storeId: 'store-1', channel: '信息流', startAt: new Date('2026-08-01T00:00:00+08:00'), endAt: new Date('2026-08-31T23:59:59+08:00'), impressions: 100, clicks: 10, spend: 400, attributedRevenue: 1200 },
+      { id: 'feed-2', platform: '天猫', storeId: 'store-1', channel: '信息流', startAt: new Date('2026-08-08T00:00:00+08:00'), endAt: new Date('2026-08-08T23:59:59+08:00'), impressions: 100, clicks: 10, spend: 100, attributedRevenue: 300 },
+      { id: 'search-jd', platform: '京东', storeId: 'store-2', channel: '搜索', startAt: new Date('2026-08-01T00:00:00+08:00'), endAt: new Date('2026-08-31T23:59:59+08:00'), impressions: 100, clicks: 10, spend: 600, attributedRevenue: 900 },
+      { id: 'expired', platform: '天猫', storeId: 'store-1', channel: '搜索', startAt: new Date('2026-07-01T00:00:00+08:00'), endAt: new Date('2026-07-31T23:59:59+08:00'), impressions: 100, clicks: 10, spend: 999, attributedRevenue: 9999 },
+    ],
+  };
+
+  const allPlatforms = calculateSnapshot(campaignDataset, filters, now);
+  const tmall = calculateSnapshot(campaignDataset, { ...filters, platform: '天猫' }, now);
+  const category = calculateSnapshot(campaignDataset, { ...filters, categoryId: 'category-1' }, now);
+
+  expect(allPlatforms.channelRanking).toEqual([
+    { channel: '信息流', attributedRevenue: 1500, spend: 500 },
+    { channel: '搜索', attributedRevenue: 900, spend: 600 },
+  ]);
+  expect(tmall.channelRanking).toEqual([
+    { channel: '信息流', attributedRevenue: 1500, spend: 500 },
+  ]);
+  expect(category.channelRanking).toEqual([]);
+});
+
 test('类目筛选按匹配明细分摊订单级费用、退款和排行', () => {
   const multiCategoryDataset: CommerceDataset = {
     ...dataset,
@@ -201,7 +241,7 @@ test('类目筛选按匹配明细分摊订单级费用、退款和排行', () =>
   expect(snapshot.kpis.grossMarginRate.value).toBeCloseTo(44 / 84);
   expect(snapshot.kpis.refundRate.value).toBeCloseTo(21 / 105);
   expect(snapshot.salesTrend.reduce((total, point) => total + point.gmv, 0)).toBe(105);
-  expect(snapshot.channelRanking).toEqual([{ platform: '天猫', gmv: 105 }]);
+  expect(snapshot.channelRanking).toEqual([]);
   expect(snapshot.regionRanking).toEqual([{ region: '华东', gmv: 105 }]);
   expect(snapshot.productRanking).toEqual([{ productId: 'product-1', name: '商品一', gmv: 100 }]);
   expect(snapshot.recentOrders).toEqual([expect.objectContaining({ id: 'multi-category-order', amount: 105 })]);

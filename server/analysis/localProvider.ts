@@ -27,7 +27,10 @@ export function createLocalAnalysis(
     const kpi = context.kpis[alert.metric];
     return { label: metricTitle(alert.metric), value: kpi.value, direction: direction(kpi.changeRate) };
   });
-  const contributor = context.topContributors.products[0] ?? context.topContributors.channels[0] ?? context.topContributors.regions[0];
+  const channelContributor = context.topContributors.channels[0];
+  const contributor = context.topContributors.products[0]
+    ?? (channelContributor ? { label: channelContributor.label, value: channelContributor.attributedRevenue } : undefined)
+    ?? context.topContributors.regions[0];
   const signals = limit([
     ...alertSignals,
     ...(contributor ? [{ label: '主要贡献', value: contributor.value, direction: 'flat' as const }] : []),
@@ -41,7 +44,7 @@ export function createLocalAnalysis(
   if (causes.length === 0) {
     const contributors = [
       context.topContributors.products[0],
-      context.topContributors.channels[0],
+      channelContributor ? { label: channelContributor.label, value: channelContributor.attributedRevenue } : undefined,
       context.topContributors.regions[0],
     ].filter((item): item is { label: string; value: number } => item !== undefined);
     causes.push(...contributors.map((item) => ({
