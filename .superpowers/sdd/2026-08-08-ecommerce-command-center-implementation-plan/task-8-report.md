@@ -67,3 +67,11 @@
 2. 参数验证表明 `tsx --env-file-if-exists=.env watch server/index.ts` 会把 `watch` 解析为入口文件，不能使用。项目当前 Node 为 v24.15.0，最终改为 `node --env-file-if-exists=.env --import tsx --watch server/index.ts`：临时文件存在时 GREEN 为 5173 + 8790；删除 `.env` 后 GREEN 为 5173 + 8787。README 明确 Node.js 24 或更高版本要求。
 3. 拆分 E2E：截图用例标记为 `@screenshots`；`pnpm e2e` 排除该标记，`pnpm screenshots` 仅运行该标记。旧 `pnpm e2e` 的 RED 证据为 6 张 PNG 的 SHA-256 都发生变化；新 `pnpm e2e` 为 1/1 通过且 6 张截图 hash 变化数为 0；`pnpm screenshots` 为 1/1 通过并在 05:01:46–05:01:54 明确重生 6 张交付图。
 4. 最后一次逐张视觉复核仍通过：三种桌面尺寸无横滚、裁切或重叠，主图无无预警红色异常点，分析图金额紧凑且可读。
+
+## 修复轮 2：Vite 动态 API 代理端口
+
+1. RED：临时 `.env` 只含 `PORT=8790` 时，启动状态为 Vite 5173、Express 8790、8787 无监听；旧 Vite 代理仍固定指向 8787，核心 E2E 失败于智能分析请求后的结果不可见。纯函数测试首次运行也因 `resolveApiPort` 尚不存在而 7/7 失败。
+2. GREEN：Vite 通过 `loadEnv(mode, process.cwd(), '')` 取得环境，但只解构和使用 `PORT`；进程环境优先于文件值。端口解析覆盖未设置、合法值、非数字、零、越界和小数，非法值统一回退 8787。配置没有读取、定义或向客户端注入 `DEEPSEEK_API_KEY`。
+3. 集成证据：临时 `PORT=8790` 时仅监听 5173 + 8790，核心 `pnpm e2e` 为 1/1 通过；删除 `.env` 后仅监听 5173 + 8787，核心 E2E 仍为 1/1 通过。两轮执行前后 6 张交付截图的 SHA-256 完全一致，未运行截图刷新用例。
+4. 新鲜质量门：聚焦端口测试 7/7、`pnpm test` 16 个文件 / 101 个测试、`pnpm exec tsc --noEmit`、`pnpm build` 均通过；构建仅保留已记录的 ECharts 大 chunk 非阻塞警告。受追踪文件与 `dist/` 的疑似真实 Key 扫描均为 0；`.env` 不存在，5173、8787、8790 均无残留监听。
+5. Fidelity ledger：本轮没有改动组件、样式、数据或截图；浅色视觉、顶部导航、KPI、3-6-3 经营轨道、底部拆解和智能分析四区的既有视觉证据不变，仅修正开发环境的 API 路由一致性。
