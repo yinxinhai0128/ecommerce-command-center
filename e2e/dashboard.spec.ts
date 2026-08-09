@@ -19,6 +19,13 @@ async function expectNoHorizontalOverflow(page: Page): Promise<void> {
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 }
 
+async function expectAnalysisApiReady(page: Page): Promise<void> {
+  await expect.poll(async () => {
+    const response = await page.request.get('/api/readiness-check');
+    return response.status();
+  }).toBe(404);
+}
+
 test('经营驾驶舱关键经营流在桌面视口可用', async ({ page }) => {
   const consoleMessages = collectRelevantConsole(page);
   let analysisRequests = 0;
@@ -31,6 +38,7 @@ test('经营驾驶舱关键经营流在桌面视口可用', async ({ page }) => 
   await expect(page.getByRole('heading', { name: '经营驾驶舱' })).toBeVisible();
   await expect(page.getByText('GMV').first()).toBeVisible();
   await expect(page.locator('body')).not.toContainText(/Internal Server Error|Vite Error|Unexpected Application Error/);
+  await expectAnalysisApiReady(page);
 
   await page.getByRole('button', { name: '暂停更新' }).click();
   await expect(page.getByText('已暂停')).toBeVisible();
@@ -72,6 +80,7 @@ test('保存三个桌面视口的实时监控与智能分析截图 @screenshots'
     await expect(page.getByRole('heading', { name: '经营驾驶舱' })).toBeVisible();
     await expect(page.getByText('实时运行中')).toBeVisible();
     await expect(page.getByRole('button', { name: '暂停更新' })).toBeVisible();
+    await expectAnalysisApiReady(page);
     await page.waitForTimeout(500);
     await expectNoHorizontalOverflow(page);
     await page.screenshot({ path: `screenshots/realtime-${viewport.name}.png`, fullPage: false });
