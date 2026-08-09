@@ -4,7 +4,7 @@ import { createPilotRepository } from './repository';
 import { openPilotDatabase } from './database';
 import { resolveOlistPaths } from './paths';
 import { createReplayController, type PilotReplayController, type ReplayStateStore } from './replay';
-import { ensureReplayStateSchema, replayActionSchema, snapshotQuerySchema } from './schema';
+import { ensureReplayStateSchema, MAX_DATE_RANGE_DAYS, replayActionSchema, snapshotQuerySchema } from './schema';
 import type { OlistManifest, PilotReplayState } from './contracts';
 
 export type PilotRouterOptions = {
@@ -14,7 +14,16 @@ export type PilotRouterOptions = {
 type PilotService = {
   repository: ReturnType<typeof createPilotRepository>;
   replay: PilotReplayController;
+  database: ReturnType<typeof openPilotDatabase>;
 };
+
+export type PilotRouter = Router & { dispose(): void };
+
+function rangeDays(start: string, end: string) {
+  const [startYear, startMonth, startDay] = start.split('-').map(Number);
+  const [endYear, endMonth, endDay] = end.split('-').map(Number);
+  return (Date.UTC(endYear, endMonth - 1, endDay) - Date.UTC(startYear, startMonth - 1, startDay)) / 86_400_000 + 1;
+}
 
 function loadManifest(dataDir: string): OlistManifest | undefined {
   const manifestPath = resolveOlistPaths(dataDir).manifestPath;
@@ -44,7 +53,7 @@ function replayStore(database: ReturnType<typeof openPilotDatabase>): ReplayStat
   };
 }
 
-export function createPilotRouter(options: PilotRouterOptions = {}): Router {
+export function createPilotRouter(options: PilotRouterOptions = {}): PilotRouter {
   const router = Router();
   const dataDir = options.dataDir ?? 'var/olist';
   let service: PilotService | undefined;
@@ -59,6 +68,7 @@ export function createPilotRouter(options: PilotRouterOptions = {}): Router {
     service = {
       repository: createPilotRepository(database),
       replay: createReplayController({ store: replayStore(database), range: manifest.range }),
+      database,
     };
     return service;
   };
@@ -82,7 +92,7 @@ export function createPilotRouter(options: PilotRouterOptions = {}): Router {
       res.status(400).json({ error: 'INVALID_QUERY' });
       return;
     }
-    if (parsed.data.start > parsed.data.end) {
+    if (parsed.data.start > parsed.data.end || rangeDays(parsed.data.start, parsed.data.end) > MAX_DATE_RANGE_DAYS) {
       res.status(400).json({ error: 'INVALID_DATE_RANGE' });
       return;
     }
@@ -92,13 +102,20 @@ export function createPilotRouter(options: PilotRouterOptions = {}): Router {
         res.status(503).json({ error: 'PILOT_NOT_READY' });
         return;
       }
+      const filterOptions = current.repository.getFilterOptions();
+      if ((parsed.data.category && !filterOptions.categories.includes(parsed.data.category))
+        || (parsed.data.sellerId && !filterOptions.sellerIds.includes(parsed.data.sellerId))
+        || (parsed.data.customerState && !filterOptions.customerStates.includes(parsed.data.customerState))) {
+        res.status(400).json({ error: 'INVALID_QUERY' });
+        return;
+      }
       res.json(current.repository.getSnapshot(parsed.data, current.replay.getState().sourceLocalNow));
     } catch {
       res.status(503).json({ error: 'PILOT_DATABASE_UNAVAILABLE' });
     }
   });
 
-  router.get('/filters', (_req, res) => {
+  router.get('/filter-options', (_req, res) => {
     try {
       const current = getService();
       if (!current) {
@@ -129,5 +146,12 @@ export function createPilotRouter(options: PilotRouterOptions = {}): Router {
     }
   });
 
-  return router;
+  return Object.assign(router, {
+    dispose() {
+      if (!service) return;
+      service.replay.dispose();
+      service.database.close();
+      service = undefined;
+    },
+  });
 }
