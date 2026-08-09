@@ -22,6 +22,7 @@ function Probe() {
     {dashboard.error && <span role="alert">{dashboard.error.message}</span>}
     <span>{dashboard.status?.ready ? (dashboard.status.replay.isRunning ? '回放中' : '已暂停') : '未就绪'}</span>
     <span>{dashboard.filters ? `${dashboard.filters.start}/${dashboard.filters.end}` : 'no filters'}</span>
+    <span>{dashboard.isLoading ? 'loading' : 'idle'}</span>
     <button onClick={() => void dashboard.pauseReplay()}>暂停回放</button>
     <button onClick={dashboard.retry}>重试</button>
   </>;
@@ -175,4 +176,25 @@ test('回放变更进行中跳过轮询，并在最新服务器回放状态后�
   await act(async () => { await Promise.resolve(); await Promise.resolve(); });
   expect(screen.getByText('已暂停')).toBeInTheDocument();
   expect(fetchMock.mock.calls.length).toBe(pendingCalls + 2);
+});
+
+test('回放使旧刷新失效并在失败时立即解除 loading、显示错误', async () => {
+  let rejectReplay: (reason: Error) => void = () => undefined;
+  const fetchMock = vi.fn((url: RequestInfo | URL) => {
+    const path = String(url);
+    if (path === '/api/pilot/status') return Promise.resolve(response({ ready: true, range: filters, replay: { sourceLocalNow: '2018-01-31 00:00:00', isRunning: true } }));
+    if (path === '/api/pilot/filter-options') return Promise.resolve(response({ categories: [], sellerIds: [], customerStates: [] }));
+    if (path.startsWith('/api/pilot/snapshot')) return Promise.resolve(response(snapshot));
+    if (path === '/api/pilot/replay') return new Promise<Response>((_resolve, reject) => { rejectReplay = reject; });
+    throw new Error(`unexpected ${path}`);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  render(<PilotDashboardProvider><Probe /></PilotDashboardProvider>);
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+  await act(async () => { screen.getByRole('button', { name: '暂停回放' }).click(); await Promise.resolve(); });
+  expect(screen.getByText('idle')).toBeInTheDocument();
+  rejectReplay(new TypeError('offline'));
+  await act(async () => { await Promise.resolve(); });
+  expect(screen.getByRole('alert')).toHaveTextContent('璇曠偣鏈嶅姟缃戠粶杩炴帴澶辫触');
+  expect(screen.getByText('idle')).toBeInTheDocument();
 });

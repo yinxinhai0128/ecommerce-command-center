@@ -111,6 +111,7 @@ export function PilotDashboardProvider({ children }: { children: ReactNode }): R
   const replay = useCallback(async (action: PilotReplayAction) => {
     requestController.current?.abort();
     refreshGeneration.current += 1;
+    setIsLoading(false);
     replayController.current?.abort();
     const controller = new AbortController();
     replayController.current = controller;
@@ -124,7 +125,10 @@ export function PilotDashboardProvider({ children }: { children: ReactNode }): R
       mutationInFlight.current = false;
       refreshRef.current(false);
     } catch (cause) {
-      if (mounted.current && mutationGeneration === replayMutationGeneration.current && !isAbortError(cause)) setError(cause instanceof Error ? cause : new Error('璇曠偣鍥炴斁鎿嶄綔澶辫触'));
+      if (mounted.current && mutationGeneration === replayMutationGeneration.current && !isAbortError(cause)) {
+        setIsLoading(false);
+        setError(cause instanceof Error ? cause : new Error('璇曠偣鍥炴斁鎿嶄綔澶辫触'));
+      }
     } finally {
       if (mutationGeneration === replayMutationGeneration.current) mutationInFlight.current = false;
     }
