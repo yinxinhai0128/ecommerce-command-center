@@ -18,7 +18,12 @@ export function ActionList({ actions = [] }: ActionListProps): JSX.Element {
               <li key={`${action.priority}-${action.title}`} data-priority={action.priority}>
                 <span className="action-priority">{priorityLabel[action.priority]}优先级</span>
                 <strong>{action.title}</strong>
-                <p>{action.rationale}</p>
+                <dl className="action-details">
+                  <div><dt>原因</dt><dd>{action.rationale}</dd></div>
+                  <div><dt>负责人</dt><dd>{action.ownerRole}</dd></div>
+                  <div><dt>预期影响</dt><dd>{action.expectedImpact}</dd></div>
+                  <div><dt>验证指标</dt><dd>{action.validationMetric}</dd></div>
+                </dl>
               </li>
             ))}
           </ol>

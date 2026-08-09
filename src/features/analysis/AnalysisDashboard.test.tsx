@@ -64,9 +64,9 @@ const result: AnalysisResult = {
   ],
   risks: [{ severity: 'warning', title: '退款率风险', evidence: '退款率仍高于目标。' }],
   actions: [
-    { priority: 'low', title: '整理周报', rationale: '沉淀本周结论。' },
-    { priority: 'high', title: '核查退款商品', rationale: '优先控制退款损失。' },
-    { priority: 'medium', title: '追加渠道预算', rationale: '放大高贡献渠道。' },
+    { priority: 'low', title: '整理周报', rationale: '沉淀本周结论。', ownerRole: '经营分析负责人', expectedImpact: '形成复盘共识', validationMetric: '周报结论采纳数' },
+    { priority: 'high', title: '核查退款商品', rationale: '优先控制退款损失。', ownerRole: '商品运营负责人', expectedImpact: '降低退款损失', validationMetric: '7 天退款率' },
+    { priority: 'medium', title: '追加渠道预算', rationale: '放大高贡献渠道。', ownerRole: '投放负责人', expectedImpact: '提升渠道 GMV', validationMetric: '7 天渠道 ROAS' },
   ],
   followUps: ['哪些商品导致退款上升？', '明天达标概率如何？'],
   source: 'local',
@@ -196,7 +196,10 @@ describe('智能分析内容与问答', () => {
       expect.stringContaining('追加渠道预算'),
       expect.stringContaining('整理周报'),
     ]);
-    expect(screen.getByText('优先控制退款损失。')).toBeInTheDocument();
+    expect(within(actions[0]).getByText('优先控制退款损失。')).toBeInTheDocument();
+    expect(within(actions[0]).getByText('商品运营负责人')).toBeInTheDocument();
+    expect(within(actions[0]).getByText('降低退款损失')).toBeInTheDocument();
+    expect(within(actions[0]).getByText('7 天退款率')).toBeInTheDocument();
   });
 
   test('预置问题以精确文本请求最新上下文并记录最小历史', async () => {

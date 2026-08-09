@@ -298,7 +298,10 @@ select:focus-visible {
 .analysis-actions li[data-priority="medium"] { border-top-color: var(--warning); }
 .action-priority { display: block; color: var(--text-muted); font-size: 10px; }
 .analysis-actions strong { display: block; margin-top: 3px; font-size: 12px; }
-.analysis-actions p { margin: 4px 0 0; color: var(--text-muted); font-size: 11px; }
+.action-details { display: grid; gap: 3px; margin: 5px 0 0; font-size: 10px; }
+.action-details div { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 5px; }
+.action-details dt { color: var(--text-muted); }
+.action-details dd { min-width: 0; margin: 0; }
 .analysis-presets, .analysis-follow-ups { display: grid; gap: 6px; }
 .analysis-presets button, .analysis-follow-ups button, .analysis-question-form button, .analysis-stale button, .analysis-error button { border: 1px solid var(--border); border-radius: 4px; padding: 7px 9px; background: var(--bg-panel); color: var(--text-primary); text-align: left; font-size: 12px; cursor: pointer; }
 .analysis-presets button:disabled, .analysis-follow-ups button:disabled, .analysis-question-form button:disabled { color: var(--text-muted); cursor: default; }

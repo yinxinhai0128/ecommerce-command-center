@@ -34,4 +34,10 @@ test('无告警的本地分析以真实首要贡献项生成变化归因', () =>
     expect.objectContaining({ label: '区域A', contribution: 8_000 }),
   ]);
   expect(result.causes.every((cause) => cause.evidence.length > 0)).toBe(true);
+  expect(result.actions[0]).toMatchObject({
+    ownerRole: '经营分析负责人',
+    expectedImpact: '保持主要增长来源稳定贡献',
+    validationMetric: '未来 7 天主要贡献项与 GMV',
+  });
+  expect(Object.values(result.actions[0]).every((value) => value.length <= 1_000)).toBe(true);
 });

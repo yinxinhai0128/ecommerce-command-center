@@ -15,7 +15,14 @@ const signalSchema = z.object({
 }).strict();
 const causeSchema = z.object({ label: text, contribution: finiteNumber, evidence: text }).strict();
 const riskSchema = z.object({ severity: z.enum(['critical', 'warning']), title: text, evidence: text }).strict();
-const actionSchema = z.object({ priority: z.enum(['high', 'medium', 'low']), title: text, rationale: text }).strict();
+const actionSchema = z.object({
+  priority: z.enum(['high', 'medium', 'low']),
+  title: text,
+  rationale: text,
+  ownerRole: text,
+  expectedImpact: text,
+  validationMetric: text,
+}).strict();
 const followUpSchema = text.regex(/[？?]$/, '后续问题必须以问号结尾').transform((value) => value as FollowUpQuestion);
 
 export const analysisRequestSchema = z.object({

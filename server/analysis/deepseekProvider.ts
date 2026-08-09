@@ -19,7 +19,14 @@ const modelSchemaDescription = JSON.stringify({
   signals: [{ label: 'string', value: 'finite number', direction: 'up | down | flat' }],
   causes: [{ label: 'string', contribution: 'finite number', evidence: 'string' }],
   risks: [{ severity: 'critical | warning', title: 'string', evidence: 'string' }],
-  actions: [{ priority: 'high | medium | low', title: 'string', rationale: 'string' }],
+  actions: [{
+    priority: 'high | medium | low',
+    title: 'string',
+    rationale: 'string',
+    ownerRole: 'string',
+    expectedImpact: 'string',
+    validationMetric: 'string',
+  }],
   followUps: ['以 ? 或 ？结尾的可点击问句'],
 });
 

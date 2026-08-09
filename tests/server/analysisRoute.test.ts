@@ -51,7 +51,14 @@ const modelResult = {
   signals: [{ label: '退款率', value: 0.08, direction: 'up' as const }],
   causes: [{ label: '尺码问题', contribution: 9600, evidence: '退款预警建议复盘尺码问题' }],
   risks: [{ severity: 'warning' as const, title: '目标风险', evidence: '达标概率为 65%' }],
-  actions: [{ priority: 'high' as const, title: '复盘尺码', rationale: '退款率 8% 高于对比期 3%' }],
+  actions: [{
+    priority: 'high' as const,
+    title: '复盘尺码',
+    rationale: '退款率 8% 高于对比期 3%',
+    ownerRole: '商品运营负责人',
+    expectedImpact: '将退款损失降低 10%',
+    validationMetric: '7 天退款率低于 6%',
+  }],
   followUps: ['如何降低退款率？'],
 };
 
@@ -106,6 +113,9 @@ describe('POST /api/analysis', () => {
       priority: 'high',
       title: '复盘退款原因',
       rationale: '退款率为 8%，预警提示：退款率为 8%。',
+      ownerRole: '商品运营负责人',
+      expectedImpact: '降低退款损失并改善净销售额',
+      validationMetric: '未来 7 天退款率及退款金额',
     });
     expect(response.body.followUps.every((followUp: string) => /[？?]$/.test(followUp))).toBe(true);
     expect(fetchImpl).not.toHaveBeenCalled();
@@ -123,7 +133,7 @@ describe('POST /api/analysis', () => {
     expect(response.body.signals[0]).toEqual({ label: '退款率', value: 0.08, direction: 'up' });
     expect(response.body.causes[0]).toEqual({ label: '尺码问题', contribution: 9600, evidence: '退款预警建议复盘尺码问题' });
     expect(response.body.risks[0]).toEqual({ severity: 'warning', title: '目标风险', evidence: '达标概率为 65%' });
-    expect(response.body.actions[0]).toEqual({ priority: 'high', title: '复盘尺码', rationale: '退款率 8% 高于对比期 3%' });
+    expect(response.body.actions[0]).toEqual(modelResult.actions[0]);
     expect(response.body.followUps[0]).toMatch(/[？?]$/);
     expect(response.body.fallbackReason).toBeUndefined();
     expect(JSON.stringify(response.body)).not.toContain(apiKey);
@@ -147,6 +157,9 @@ describe('POST /api/analysis', () => {
     expect(requestBody.messages[0].content).toContain('"contribution"');
     expect(requestBody.messages[0].content).toContain('"severity"');
     expect(requestBody.messages[0].content).toContain('"priority"');
+    expect(requestBody.messages[0].content).toContain('"ownerRole"');
+    expect(requestBody.messages[0].content).toContain('"expectedImpact"');
+    expect(requestBody.messages[0].content).toContain('"validationMetric"');
     expect(requestBody.messages[0].content).toContain('问句');
   });
 
@@ -157,6 +170,14 @@ describe('POST /api/analysis', () => {
     ['空模型内容', () => createFetchWithContent(''), 'invalid_response'],
     ['非法模型 JSON', () => createFetchWithContent('{not json'), 'invalid_response'],
     ['缺少模型字段', () => createFetchWithContent(JSON.stringify({ summary: '不完整' })), 'invalid_response'],
+    ['行动缺少负责人角色', () => createFetchWithContent(JSON.stringify({
+      ...modelResult,
+      actions: modelResult.actions.map(({ ownerRole: _ownerRole, ...action }) => action),
+    })), 'invalid_response'],
+    ['行动验证指标超长', () => createFetchWithContent(JSON.stringify({
+      ...modelResult,
+      actions: [{ ...modelResult.actions[0], validationMetric: 'x'.repeat(1_001) }],
+    })), 'invalid_response'],
     ['超出允许范围的模型数值', () => createFetchWithContent(JSON.stringify({ ...modelResult, actions: [], signals: [] })), 'invalid_response'],
   ])('在%s时使用本地降级结果', async (_name, createFetch, fallbackReason) => {
     const app = createApp({ fetchImpl: createFetch(), env: { DEEPSEEK_API_KEY: 'server-only-key' } });

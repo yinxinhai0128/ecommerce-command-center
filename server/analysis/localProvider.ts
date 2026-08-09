@@ -60,10 +60,31 @@ export function createLocalAnalysis(
 
   const refundAlert = context.alerts.find((alert) => alert.metric === 'refundRate');
   const actions = refundAlert
-    ? [{ priority: 'high' as const, title: '复盘退款原因', rationale: truncate(`${refundEvidence}，预警提示：${refundAlert.evidence}。`) }]
+    ? [{
+      priority: 'high' as const,
+      title: '复盘退款原因',
+      rationale: truncate(`${refundEvidence}，预警提示：${refundAlert.evidence}。`),
+      ownerRole: '商品运营负责人',
+      expectedImpact: '降低退款损失并改善净销售额',
+      validationMetric: '未来 7 天退款率及退款金额',
+    }]
     : context.targetProbability < 0.8
-      ? [{ priority: 'high' as const, title: '提升目标达成', rationale: truncate(`目标达成概率为 ${percentage(context.targetProbability)}%，需跟进未来 7 天预测。`) }]
-      : [{ priority: 'medium' as const, title: '跟进主要贡献项', rationale: truncate(contributor ? `${contributor.label}当前贡献 ${contributor.value}，应持续跟踪。` : `GMV为 ${context.kpis.gmv.value}，应持续跟踪。`) }];
+      ? [{
+        priority: 'high' as const,
+        title: '提升目标达成',
+        rationale: truncate(`目标达成概率为 ${percentage(context.targetProbability)}%，需跟进未来 7 天预测。`),
+        ownerRole: '经营负责人',
+        expectedImpact: '提升目标达成概率',
+        validationMetric: '未来 7 天目标达成概率与 GMV',
+      }]
+      : [{
+        priority: 'medium' as const,
+        title: '跟进主要贡献项',
+        rationale: truncate(contributor ? `${contributor.label}当前贡献 ${contributor.value}，应持续跟踪。` : `GMV为 ${context.kpis.gmv.value}，应持续跟踪。`),
+        ownerRole: '经营分析负责人',
+        expectedImpact: '保持主要增长来源稳定贡献',
+        validationMetric: '未来 7 天主要贡献项与 GMV',
+      }];
 
   return {
     summary: truncate(context.alerts.length > 0
