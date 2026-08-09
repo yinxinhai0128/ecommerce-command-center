@@ -54,6 +54,6 @@ export function createApp(options: AppOptions = {}): App {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT ?? 8787);
-  const app = createApp();
+  const app = createApp({ pilot: process.env.OLIST_DATA_DIR ? { dataDir: process.env.OLIST_DATA_DIR } : undefined });
   app.listen(port, '127.0.0.1');
 }

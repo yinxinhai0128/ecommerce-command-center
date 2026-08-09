@@ -26,7 +26,7 @@ pnpm dev
 - `olist_sellers_dataset.csv`
 - `product_category_name_translation.csv`
 
-本机网络无法连接 Kaggle 时同样应使用该官方页面手动下载，不能替换为第三方来源。
+本次验收实际尝试官方下载时，Kaggle TLS 连接返回 `ECONNRESET`。遇到该网络错误时同样应登录上述官方页面手动下载，不能替换为第三方来源。
 
 ## 许可证、归属与使用边界
 

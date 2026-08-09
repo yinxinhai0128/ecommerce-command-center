@@ -41,6 +41,13 @@ test.each([401, 403])('links to Kaggle manual download when authentication retur
     .rejects.toThrow('https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce');
 });
 
+test('links to the official manual download and local source path when the network resets', async () => {
+  const networkError = Object.assign(new Error('socket reset'), { code: 'ECONNRESET' });
+
+  await expect(downloadOlistSource({ dataDir: await temporaryDirectory(), fetchImpl: async () => { throw networkError; } }))
+    .rejects.toThrow(/https:\/\/www\.kaggle\.com\/datasets\/olistbr\/brazilian-ecommerce[\s\S]*var\/olist\/source/);
+});
+
 test('rejects a successful response that is not a ZIP archive', async () => {
   await expect(downloadOlistSource({ dataDir: await temporaryDirectory(), fetchImpl: fetchResponse(new Response('not a zip')) }))
     .rejects.toThrow('不是非空 ZIP 文件');

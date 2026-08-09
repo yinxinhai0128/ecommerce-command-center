@@ -6,11 +6,18 @@ import type { DownloadOptions, OlistSourceReceipt } from './contracts';
 import { resolveOlistPaths } from './paths';
 
 const downloadUrl = 'https://www.kaggle.com/api/v1/datasets/download/olistbr/brazilian-ecommerce';
+const officialDatasetUrl = 'https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce';
+const manualDownloadGuide = `请登录 ${officialDatasetUrl} 手动下载官方归档，将七个 CSV 解压到 var/olist/source 后运行 pnpm data:olist:import。`;
 const requiredFiles = new Set(['olist_orders_dataset.csv', 'olist_order_items_dataset.csv', 'olist_order_reviews_dataset.csv', 'olist_products_dataset.csv', 'olist_customers_dataset.csv', 'olist_sellers_dataset.csv', 'product_category_name_translation.csv']);
 
 export async function downloadOlistSource({ dataDir, fetchImpl = fetch }: DownloadOptions): Promise<OlistSourceReceipt> {
-  const response = await fetchImpl(downloadUrl);
-  if (response.status === 401 || response.status === 403) throw new Error('Kaggle 身份验证失败，请从 https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce 手动下载。');
+  let response: Response;
+  try {
+    response = await fetchImpl(downloadUrl);
+  } catch {
+    throw new Error(`Kaggle 网络连接失败。${manualDownloadGuide}`);
+  }
+  if (response.status === 401 || response.status === 403) throw new Error(`Kaggle 身份验证失败。${manualDownloadGuide}`);
   if (!response.ok) throw new Error(`Kaggle 下载失败: ${response.status}`);
   const archive = new Uint8Array(await response.arrayBuffer());
   if (archive.length < 4 || archive[0] !== 0x50 || archive[1] !== 0x4b) throw new Error('Kaggle 返回的不是非空 ZIP 文件');
