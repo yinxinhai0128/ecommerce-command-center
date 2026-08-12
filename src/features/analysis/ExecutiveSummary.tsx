@@ -10,7 +10,7 @@ export function ExecutiveSummary({ result }: ExecutiveSummaryProps): JSX.Element
       <Panel title="今日经营结论">
         {result ? (
           <>
-            <p className="analysis-summary">{result.summary}</p>
+            <p data-testid="analysis-summary" className="analysis-summary">{result.summary}</p>
             <div className="analysis-metadata">
               <span>{result.source === 'deepseek' ? 'DeepSeek 分析' : '本地分析'}</span>
               <time dateTime={result.generatedAt}>生成于 {new Date(result.generatedAt).toLocaleString('zh-CN', { hour12: false })}</time>

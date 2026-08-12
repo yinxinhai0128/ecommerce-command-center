@@ -1,0 +1,9 @@
+product_id,product_category_name,product_name_lenght,product_description_lenght,product_photos_qty,product_weight_g,product_length_cm,product_height_cm,product_width_cm
+p1,category_a,10,20,1,100,10,5,2
+p2,category_b,11,21,1,110,11,5,2
+p3,category_a,12,22,1,120,12,5,2
+p4,category_b,13,23,1,130,13,5,2
+p5,category_a,14,24,1,140,14,5,2
+p6,category_b,15,25,1,150,15,5,2
+p7,category_a,16,26,1,160,16,5,2
+p8,category_b,17,27,1,170,17,5,2
