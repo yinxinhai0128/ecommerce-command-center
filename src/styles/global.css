@@ -55,6 +55,17 @@ select:focus-visible {
   min-width: 0;
 }
 
+.overview-page, .operations-page { display: grid; gap: 12px; padding: 16px 24px 24px; min-width: 0; }
+.overview-page > h2 { margin: 0; font-size: 20px; }
+.overview-facts, .operations-page { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.overview-facts { display: grid; gap: 12px; }
+.operations-page ul, .operations-page ol { display: grid; gap: 6px; padding-left: 20px; margin: 0; color: var(--text-muted); font-size: 13px; }
+.operations-page p { margin: 0; color: var(--text-muted); font-size: 13px; }
+.operations-page p + p { margin-top: 8px; }
+.workspace-loading, .workspace-state { margin: 24px; color: var(--text-muted); }
+.workspace-state { display: flex; align-items: center; gap: 8px; }
+.workspace-state button { border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; background: var(--bg-panel); color: var(--text-primary); cursor: pointer; }
+
 .app-header {
   min-width: 0;
   height: 56px;
@@ -278,6 +289,7 @@ select:focus-visible {
 @media (prefers-reduced-motion: reduce) { .order-feed-item { animation: none; } }
 @media (max-width: 900px) { .realtime-dashboard { gap: 8px; padding: 12px; } .kpi-item { padding: 10px; } .kpi-item strong { font-size: 15px; } .commerce-overview { grid-column: span 4; } .sales-pulse { grid-column: span 8; } .realtime-side-stack { grid-column: span 12; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
 @media (max-width: 620px) { .kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } .kpi-item:nth-child(3) { border-right: 0; } .commerce-overview, .sales-pulse { grid-column: span 12; } .realtime-side-stack { grid-template-columns: minmax(0, 1fr); } .breakdown-panels { gap: 8px; } .breakdown-panel { padding: 10px; } }
+@media (max-width: 620px) { .overview-page, .operations-page { padding: 12px; } .overview-facts, .operations-page { grid-template-columns: minmax(0, 1fr); gap: 8px; } }
 
 .analysis-dashboard { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; min-width: 0; padding: 16px 24px 24px; overflow-x: clip; }
 .analysis-main { grid-column: span 8; display: grid; gap: 12px; min-width: 0; align-content: start; }

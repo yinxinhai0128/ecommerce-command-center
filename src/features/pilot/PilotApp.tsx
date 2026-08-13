@@ -8,6 +8,7 @@ import { PilotRealtimeDashboard } from './PilotRealtimeDashboard';
 export function PilotApp(): JSX.Element {
   const [activeTab, setActiveTab] = useState<PilotTab>('realtime');
   const { status, snapshot, filters, options, isLoading, error, setFilters, retry, startReplay, pauseReplay, resetReplay } = usePilotDashboard();
+  if (error && !snapshot) return <section className="workspace-state" role="alert"><span>{error.message}</span><button type="button" onClick={retry}>重试</button></section>;
   if (isLoading && !status) return <p className="pilot-loading" role="status">正在加载运营状态</p>;
   if (!status || !status.ready) {
     return <section className="pilot-import-guide" aria-labelledby="pilot-import-title"><h1 id="pilot-import-title">运营数据准备</h1><p>历史经营数据回放</p><p>本地运营数据尚未准备完毕。请在数据管理流程中执行导入命令。</p></section>;

@@ -1,46 +1,39 @@
-import { useState, type JSX } from 'react';
+import { lazy, Suspense, useState, type JSX } from 'react';
 import { DashboardProvider } from './app/DashboardProvider';
-import { AppHeader, type DashboardTab } from './ui/AppHeader';
-import { GlobalFilters } from './ui/GlobalFilters';
-import { useDashboard } from './app/useDashboard';
-import { RealtimeDashboard } from './features/realtime/RealtimeDashboard';
-import { AnalysisDashboard } from './features/analysis/AnalysisDashboard';
 import { PilotDashboardProvider } from './app/PilotDashboardProvider';
-import { PilotApp } from './features/pilot/PilotApp';
-import { DataSourceSwitch, type DataSource } from './ui/DataSourceSwitch';
+import { useDashboard } from './app/useDashboard';
+import { usePilotDashboard } from './app/usePilotDashboard';
+import { AppShell } from './coreui/AppShell';
+import type { ProductView } from './coreui/navigation';
+import { AnalysisDashboard } from './features/analysis/AnalysisDashboard';
+import { RealtimeDashboard } from './features/realtime/RealtimeDashboard';
+import { GlobalFilters } from './ui/GlobalFilters';
 
-function DashboardApp(): JSX.Element {
-  const [activeTab, setActiveTab] = useState<DashboardTab>('realtime');
+const OverviewPage = lazy(async () => ({ default: (await import('./features/overview/OverviewPage')).OverviewPage }));
+const OperationsPage = lazy(async () => ({ default: (await import('./features/operations/OperationsPage')).OperationsPage }));
+
+function Loading(): JSX.Element { return <p className="workspace-loading" role="status">正在加载</p>; }
+
+function StandardWorkspace({ view }: { view: Exclude<ProductView, 'operations'> }): JSX.Element {
   const { snapshot, alerts, filters, isRunning } = useDashboard();
+  if (view === 'overview') return <OverviewPage snapshot={snapshot} />;
+  return <><GlobalFilters />{view === 'analysis' ? <AnalysisDashboard snapshot={snapshot} alerts={alerts} filters={filters} active /> : <RealtimeDashboard snapshot={snapshot} alerts={alerts} isRunning={isRunning} />}</>;
+}
 
-  return (
-    <>
-      <AppHeader activeTab={activeTab} onTabChange={setActiveTab} />
-      <GlobalFilters />
-      <section
-        id="dashboard-panel-realtime"
-        className="dashboard-content"
-        role="tabpanel"
-        aria-labelledby="dashboard-tab-realtime"
-        hidden={activeTab !== 'realtime'}
-      ><RealtimeDashboard snapshot={snapshot} alerts={alerts} isRunning={isRunning} /></section>
-      <section
-        id="dashboard-panel-analysis"
-        className="dashboard-content"
-        role="tabpanel"
-        aria-labelledby="dashboard-tab-analysis"
-        hidden={activeTab !== 'analysis'}
-      ><AnalysisDashboard snapshot={snapshot} alerts={alerts} filters={filters} active={activeTab === 'analysis'} /></section>
-    </>
-  );
+function OperationsWorkspace(): JSX.Element {
+  const { status, snapshot, isLoading, error, retry } = usePilotDashboard();
+  if (error) return <section className="workspace-state" role="alert"><span>{error.message}</span><button type="button" onClick={retry}>重试</button></section>;
+  if (isLoading || !status) return <Loading />;
+  if (!status.ready || !snapshot) return <section className="workspace-state"><p>经营数据暂不可用</p><button type="button" onClick={retry}>重试</button></section>;
+  return <OperationsPage snapshot={snapshot} />;
+}
+
+function Workspace({ view }: { view: ProductView }): JSX.Element {
+  if (view === 'operations') return <PilotDashboardProvider><OperationsWorkspace /></PilotDashboardProvider>;
+  return <DashboardProvider><StandardWorkspace view={view} /></DashboardProvider>;
 }
 
 export function App(): JSX.Element {
-  const [source, setSource] = useState<DataSource>('simulation');
-  return (
-    <main className="dashboard-app">
-      <DataSourceSwitch value={source} onChange={setSource} />
-      {source === 'simulation' ? <DashboardProvider><DashboardApp /></DashboardProvider> : <PilotDashboardProvider><PilotApp /></PilotDashboardProvider>}
-    </main>
-  );
+  const [activeView, setActiveView] = useState<ProductView>('overview');
+  return <main className="dashboard-app"><AppShell activeView={activeView} onViewChange={setActiveView}><Suspense fallback={<Loading />}><Workspace view={activeView} /></Suspense></AppShell></main>;
 }
