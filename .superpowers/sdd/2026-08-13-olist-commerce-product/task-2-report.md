@@ -40,3 +40,15 @@
 - `lowScoreRate` 改为 `COUNT(DISTINCT CASE WHEN review_score IN (1, 2) THEN reviews.order_id END) / COUNT(DISTINCT reviews.order_id)`。
 - 新分组已从 `PilotSnapshot` 可选改为必填。TypeScript 首次仅报 `tests/server/pilotAnalysis.test.ts(20,7)` 缺失五个分组；经授权为该 Task 3 测试夹具补充零/空安全值，未改任何 Task 3 生产代码。
 - 验证结果：仓储 18/18、指标定义 1/1、`pilotAnalysis` 26/26 通过；`tsc --noEmit` 与 `git diff --check` 通过。
+
+## 修复轮 2：履约时长只统计已送达订单
+
+### RED
+
+- 新增一个带有审批、交运时间但最终状态为 `canceled` 的订单。回放后状态分布实际将其错误显示为 `carrier`，而断言要求仍为 `canceled`；该断言以 1 项失败、18 项跳过实际观察。
+
+### GREEN
+
+- `known_status` 仅对原始 `delivered` 订单按回放时间映射 `purchased/approved/carrier/delivered`；取消、不可用等非送达终态保持原始状态。
+- 平均审批与平均交运时长均要求原始状态为 `delivered`、`delivered_at <= replayNow`，并要求各自阶段时间非空且不晚于回放。
+- 验证：新增回归 1/1、完整仓储 19/19、指标定义 1/1、`pilotAnalysis` 26/26 通过；`tsc --noEmit` 和 `git diff --check` 通过。

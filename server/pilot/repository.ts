@@ -78,12 +78,11 @@ const filteredOrdersCte = `
   ),
   selected_orders AS (
     SELECT *,
-      CASE
-        WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow THEN 'delivered'
+      CASE WHEN order_status != 'delivered' THEN order_status
+        WHEN delivered_at IS NOT NULL AND delivered_at <= :replayNow THEN 'delivered'
         WHEN carrier_at IS NOT NULL AND carrier_at <= :replayNow THEN 'carrier'
         WHEN approved_at IS NOT NULL AND approved_at <= :replayNow THEN 'approved'
-        WHEN order_status = 'delivered' THEN 'purchased'
-        ELSE order_status
+        ELSE 'purchased'
       END AS known_status,
       CASE
         WHEN :category IS NULL AND :sellerId IS NULL THEN payment_amount
@@ -254,8 +253,8 @@ export function createPilotRepository(database: DatabaseSync): PilotRepository {
       };
       const fulfillmentRow = database.prepare(`${filteredOrdersCte}
         SELECT
-          COALESCE(AVG(CASE WHEN known_status IN ('approved', 'carrier', 'delivered') THEN julianday(approved_at) - julianday(purchase_at) END), 0) AS averageApprovalDays,
-          COALESCE(AVG(CASE WHEN known_status IN ('carrier', 'delivered') THEN julianday(carrier_at) - julianday(purchase_at) END), 0) AS averageCarrierDays,
+          COALESCE(AVG(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow AND approved_at IS NOT NULL AND approved_at <= :replayNow THEN julianday(approved_at) - julianday(purchase_at) END), 0) AS averageApprovalDays,
+          COALESCE(AVG(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow AND carrier_at IS NOT NULL AND carrier_at <= :replayNow THEN julianday(carrier_at) - julianday(purchase_at) END), 0) AS averageCarrierDays,
           COALESCE(AVG(CASE WHEN known_status = 'delivered' THEN julianday(delivered_at) - julianday(purchase_at) END), 0) AS averageDeliveryDays,
           COALESCE(SUM(CASE WHEN known_status = 'delivered' AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow AND delivered_at > estimated_delivery_at THEN 1.0 ELSE 0 END) / NULLIF(SUM(CASE WHEN known_status = 'delivered' AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow THEN 1 ELSE 0 END), 0), 0) AS lateDeliveryRate,
           COALESCE(AVG(CASE WHEN known_status = 'delivered' AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow AND delivered_at > estimated_delivery_at THEN julianday(delivered_at) - julianday(estimated_delivery_at) END), 0) AS averageLateDays

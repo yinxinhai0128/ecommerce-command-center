@@ -201,6 +201,21 @@ test('uses distinct reviewed orders as the low-score-rate denominator', () => {
   expect(snapshot.experience.lowScoreRate).toBe(1);
 });
 
+test('keeps canceled orders out of fulfillment durations despite known milestones', () => {
+  // Mapping a canceled order to carrier, or averaging its known milestones, must fail this test.
+  const snapshot = createCommerceRepository(`
+    INSERT INTO orders VALUES ('canceled-with-stages', 'buyer-c', 'canceled', '2018-01-04 10:00:00', '2018-01-05 10:00:00', '2018-01-06 10:00:00', NULL, NULL);
+  `).getSnapshot({ start: '2018-01-01', end: '2018-01-31' }, '2018-01-31 23:59:59');
+
+  expect(snapshot.fulfillment.statusDistribution).toEqual([
+    { status: 'canceled', value: 2 },
+    { status: 'delivered', value: 4 },
+  ]);
+  expect(snapshot.recentOrders.find((order) => order.orderId === 'canceled-with-stages')?.status).toBe('canceled');
+  expect(snapshot.fulfillment.averageApprovalDays).toBe(0);
+  expect(snapshot.fulfillment.averageCarrierDays).toBe(0.5);
+});
+
 test('calculates only metrics supported by Olist facts', () => {
   // Removing a delivered order from the KPI cohort must fail this test.
   const snapshot = createRepository().getSnapshot(filters, replayNow);
