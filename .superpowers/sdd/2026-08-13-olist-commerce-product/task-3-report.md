@@ -64,3 +64,32 @@
 
 - 文本事实校验采用保守 allow-list：无法绑定的数字或禁词即降级，可能拒绝模型生成的无害编号/日期；这是可信优先的有意取舍。
 - 支付方式匹配依赖快照中的原始 `paymentType` token；未知中文别名不会猜测，而会按最高支付金额事实降级选择。
+
+## 审查修复轮 2：规范化可信文本证据
+
+### RED 证据
+
+- 定向命令：`node node_modules/vitest/vitest.mjs run tests/server/pilotAnalysis.test.ts --environment=node --pool=forks --maxWorkers=1 --no-file-parallelism --reporter=verbose -t "其他事实|全角数字|零宽字符|forecasting|已知中文别名|同一事实 label"`。
+- 退出码 1，6 项真实失败、1 项合法控制组通过、47 项跳过。`平均评分为 490`、全角 `１２３４５`、`毛\u200b利` 和 `forecasting` 均被错误接受为 DeepSeek 响应；“信用卡”错误选择更高额 boleto，“票据”落到通用成交额事实。
+
+### 最小实现
+
+- 所有待验证模型文本先构造规范副本：Unicode NFKC、删除 Unicode `Cf` format/zero-width 字符、转小写；禁词与数字都只扫描该规范副本。
+- 扩展预测及不可用指标的中英文词形；数字扫描覆盖 NFKC 后的全角数字、百分号与千分位。
+- 每个文本数字必须命中同一条 allow-list 事实：数值精确相等（百分号只对应 ratio 的除以 100 值），并且同一文本包含该事实的规范化 label 或显式英文展示名。动作、风险等若没有同字段事实 label 与 value 配对，则带数字即拒绝。
+- 支付只采用显式映射：`信用卡`/`credit card` → `credit_card`，`票据`/`boleto` → `boleto`，`代金券`/`voucher` → `voucher`，`借记卡`/`debit card` → `debit_card`；问题未包含已知别名时不猜测，保留分期数字和最高额 fallback。
+
+### GREEN 与兼容性证据
+
+- 上述定向命令：退出码 0，7/7 通过；合法 `成交额为 490` 保持 `deepseek`。
+- `pilotAnalysis`：54/54 通过。
+- `pilotRoute`：13/13 通过。
+- `pilotClient`：16/16 通过。
+- 旧 `/api/analysis`：22/22 通过；旧本地分析：1/1 通过。
+- `pnpm exec tsc --noEmit`：退出码 0。
+- `git diff --check`：退出码 0（仅 Windows CRLF 提示）。
+
+### 剩余风险
+
+- 英文展示名采用最小显式映射；未列出的英文别名不会猜测，含数字文本会保守降级。
+- Unicode 规范化与删除全部 `Cf` 字符是有意的安全边界，可能拒绝依赖格式控制字符呈现的无害模型文本。

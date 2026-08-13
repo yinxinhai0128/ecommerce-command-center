@@ -130,6 +130,45 @@ function modelResult(signalValue: number) {
 
 describe('Olist pilot trusted analysis', () => {
   test.each([
+    ['把其他事实的数值冒充平均评分', '平均评分为 490。'],
+    ['用全角数字隐藏陌生数值', '成交额为 １２３４５。'],
+    ['用零宽字符拆分禁止指标', '毛\u200b利表现稳定。'],
+    ['使用 forecasting 预测声明', 'Sales forecasting remains positive.'],
+  ])('DeepSeek %s时使用 invalid_response 本地降级', async (_name, summary) => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({ ...modelResult(490), summary }) } }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const app = createApp({
+      pilot: {
+        dataDir: await readyDataDirectory(), fetchImpl, env: { DEEPSEEK_API_KEY: 'server-key' },
+        now: () => new Date('2026-08-09T00:00:00.000Z'),
+      },
+    });
+    applications.push(app);
+
+    const response = await request(app).post('/api/pilot/analysis').send({ question: '表现如何？', filters });
+
+    expect(response.body).toMatchObject({ source: 'local', fallbackReason: 'invalid_response' });
+  });
+
+  test('DeepSeek 文本中的数值与同一事实 label 和 value 一致时保留服务端分析', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({ ...modelResult(490), summary: '成交额为 490。' }) } }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const app = createApp({
+      pilot: {
+        dataDir: await readyDataDirectory(), fetchImpl, env: { DEEPSEEK_API_KEY: 'server-key' },
+        now: () => new Date('2026-08-09T00:00:00.000Z'),
+      },
+    });
+    applications.push(app);
+
+    const response = await request(app).post('/api/pilot/analysis').send({ question: '成交额如何？', filters });
+
+    expect(response.body).toMatchObject({ source: 'deepseek', summary: '成交额为 490。' });
+  });
+
+  test.each([
     ['summary 中的陌生预测数值', { summary: '预计明日销售 123456789。' }],
     ['risk 中的禁止指标', { risks: [{ severity: 'warning', title: '毛利率风险', evidence: '毛利率为 30%。' }] }],
     ['action 中的陌生目标数值', { actions: [{ ...modelResult(490).actions[0], expectedImpact: '目标提升到 123456789。' }] }],
@@ -176,6 +215,26 @@ describe('Olist pilot trusted analysis', () => {
     ['3期支付', '3期分期支付情况如何？', 'payments.installments.3.paymentAmount', '分期：3期 支付金额', 420],
   ])('本地支付分析优先选择问题指定的%s事实', (_name, question, factId, label, value) => {
     const result = analyzeLocally(buildPilotAnalysisContext(snapshot), question, 'not_configured');
+
+    expect(result.signals[0]).toMatchObject({ factId, label, unit: 'currency', value });
+  });
+
+  test.each([
+    ['信用卡', '信用卡支付情况如何', 'payments.byType.credit_card.paymentAmount', '支付方式：credit_card 支付金额', 100],
+    ['票据', '票据', 'payments.byType.boleto.paymentAmount', '支付方式：boleto 支付金额', 200],
+  ])('本地支付分析只按已知中文别名选择%s事实', (_name, question, factId, label, value) => {
+    const paymentSnapshot = {
+      ...snapshot,
+      payments: {
+        ...snapshot.payments,
+        byType: [
+          { paymentType: 'boleto', paymentAmount: 200 },
+          { paymentType: 'credit_card', paymentAmount: 100 },
+        ],
+      },
+    };
+
+    const result = analyzeLocally(buildPilotAnalysisContext(paymentSnapshot), question, 'not_configured');
 
     expect(result.signals[0]).toMatchObject({ factId, label, unit: 'currency', value });
   });

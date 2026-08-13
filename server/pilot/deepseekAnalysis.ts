@@ -47,8 +47,24 @@ export function hasOnlyTrustedNumbers(analysis: Pick<PilotAnalysisResult, 'signa
   });
 }
 
-const prohibitedClaims = /毛利|成本|退款|退货|广告|投放|流量|目标|预测|预计|预估|\b(?:margin|cost|refund|advertis(?:e|ing|ement)?|traffic|target|forecast)\b/i;
-const numericClaim = /[-+]?\d+(?:\.\d+)?%?/g;
+const prohibitedClaims = /毛利|成本|退款|退货|广告|投放|流量|目标|预测|预计|预估|\b(?:gross\s*margin|margin|profit|costs?|refunds?|advertis(?:e|ed|ing|ement|ements)?|traffic|targets?|goals?|forecast(?:s|ed|ing)?|predictions?|predict(?:s|ed|ing|ive)?)\b/;
+const numericClaim = /[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?/g;
+const englishDisplayNames: Record<string, string[]> = {
+  '成交额': ['gmv', 'gross merchandise value'],
+  '有效订单数': ['valid order count'],
+  '平均订单金额': ['average order value'],
+  '取消率': ['cancellation rate'],
+  '准时送达率': ['on-time delivery rate', 'on time delivery rate'],
+  '平均配送天数': ['average delivery days'],
+  '平均评分': ['average review score', 'average rating'],
+  '支付金额': ['payment amount'],
+  '独立买家数': ['unique buyer count'],
+  '复购买家数': ['repeat buyer count'],
+};
+
+function normalizeText(value: string) {
+  return value.normalize('NFKC').replace(/\p{Cf}/gu, '').toLowerCase();
+}
 
 function textFields(analysis: PilotModelAnalysis) {
   return [
@@ -62,16 +78,21 @@ function textFields(analysis: PilotModelAnalysis) {
 
 function hasOnlyTrustedTextClaims(analysis: PilotModelAnalysis, context: PilotAnalysisContext) {
   const allowed = [...context.facts, ...context.trendChanges, ...trustedEvidenceAllowList(context).causes];
-  const allowedNumbers = allowed.flatMap(({ value, label }) => [
-    value,
-    ...(label.match(numericClaim) ?? []).map((token) => Number(token.replace('%', ''))),
-  ]);
-  return textFields(analysis).every((value) => !prohibitedClaims.test(value)
-    && (value.match(numericClaim) ?? []).every((token) => {
-      const numeric = Number(token.replace('%', ''));
-      const normalized = token.endsWith('%') ? numeric / 100 : numeric;
-      return allowedNumbers.some((allowed) => Object.is(normalized, allowed) || Object.is(numeric, allowed));
-    }));
+  return textFields(analysis).every((value) => {
+    const normalizedText = normalizeText(value);
+    if (prohibitedClaims.test(normalizedText)) return false;
+    return (normalizedText.match(numericClaim) ?? []).every((token) => {
+      const isPercent = token.endsWith('%');
+      const numeric = Number(token.replace(/,/g, '').replace('%', ''));
+      return allowed.some((evidence) => {
+        const labels = [evidence.label, ...(englishDisplayNames[evidence.label] ?? [])].map(normalizeText);
+        const matchesValue = isPercent
+          ? evidence.unit === 'ratio' && Object.is(numeric / 100, evidence.value)
+          : Object.is(numeric, evidence.value);
+        return matchesValue && labels.some((label) => normalizedText.includes(label));
+      });
+    });
+  });
 }
 
 export async function requestPilotDeepSeekAnalysis(options: DeepSeekOptions): Promise<PilotDeepSeekOutcome> {

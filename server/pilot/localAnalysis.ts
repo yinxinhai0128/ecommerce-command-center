@@ -5,10 +5,16 @@ type QuestionKind = 'payment' | 'repeatBuyers' | 'lateDelivery' | 'lowReviews' |
 
 const asQuestion = (value: string) => value as FollowUpQuestion;
 const direction = (value: number): 'up' | 'down' | 'flat' => value > 0 ? 'up' : value < 0 ? 'down' : 'flat';
+const paymentTypeAliases: Record<string, string[]> = {
+  credit_card: ['信用卡', 'credit card', 'credit_card'],
+  boleto: ['票据', 'boleto'],
+  voucher: ['代金券', 'voucher'],
+  debit_card: ['借记卡', 'debit card', 'debit_card'],
+};
 
 function classifyQuestion(question: string): QuestionKind {
   const normalized = question.normalize('NFKC').toLowerCase().replace(/\s+/g, '');
-  if (/支付|付款|信用卡|分期|payment/.test(normalized)) return 'payment';
+  if (/支付|付款|分期|payment/.test(normalized) || Object.values(paymentTypeAliases).flat().some((alias) => normalized.includes(alias.replace(/\s+/g, '')))) return 'payment';
   if (/复购|重复购买|回购|repeat/.test(normalized)) return 'repeatBuyers';
   if (/延迟|逾期|晚到|late/.test(normalized)) return 'lateDelivery';
   if (/低评分|低分|badreview/.test(normalized)) return 'lowReviews';
@@ -62,7 +68,11 @@ function includesToken(question: string, token: string) {
 
 function paymentFact(context: PilotAnalysisContext, question: string) {
   const paymentTypes = context.facts.filter(({ id }) => id.startsWith('payments.byType.'));
-  const matchedType = paymentTypes.find(({ id }) => includesToken(question, id.slice('payments.byType.'.length, -'.paymentAmount'.length)));
+  const matchedPaymentType = Object.entries(paymentTypeAliases)
+    .find(([, aliases]) => aliases.some((alias) => includesToken(question, alias)))?.[0];
+  const matchedType = matchedPaymentType
+    ? paymentTypes.find(({ id }) => id === `payments.byType.${matchedPaymentType}.paymentAmount`)
+    : undefined;
   if (matchedType) return matchedType;
   const installments = /(?:^|\D)(\d+)\s*期(?:\D|$)/u.exec(question.normalize('NFKC'))?.[1];
   const matchedInstallment = installments
