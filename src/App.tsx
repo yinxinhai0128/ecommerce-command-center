@@ -2,17 +2,14 @@ import { lazy, Suspense, useState, type JSX } from 'react';
 import { DashboardProvider } from './app/DashboardProvider';
 import { PilotDashboardProvider } from './app/PilotDashboardProvider';
 import { useDashboard } from './app/useDashboard';
-import { usePilotDashboard } from './app/usePilotDashboard';
 import { AppShell } from './coreui/AppShell';
 import type { ProductView } from './coreui/navigation';
 import { AnalysisDashboard } from './features/analysis/AnalysisDashboard';
-import { PilotFilters } from './features/pilot/PilotFilters';
-import { PilotHeader } from './features/pilot/PilotHeader';
+import { PilotApp } from './features/pilot/PilotApp';
 import { RealtimeDashboard } from './features/realtime/RealtimeDashboard';
 import { GlobalFilters } from './ui/GlobalFilters';
 
 const OverviewPage = lazy(async () => ({ default: (await import('./features/overview/OverviewPage')).OverviewPage }));
-const OperationsPage = lazy(async () => ({ default: (await import('./features/operations/OperationsPage')).OperationsPage }));
 
 function Loading(): JSX.Element { return <p className="workspace-loading" role="status">正在加载</p>; }
 
@@ -23,18 +20,7 @@ function StandardWorkspace({ view }: { view: Exclude<ProductView, 'operations'> 
 }
 
 function OperationsWorkspace(): JSX.Element {
-  const { status, snapshot, filters, options, isLoading, error, setFilters, retry, startReplay, pauseReplay, resetReplay } = usePilotDashboard();
-  if (!status) {
-    if (error) return <section className="workspace-state" role="alert"><span>{error.message}</span><button type="button" onClick={retry}>重试</button></section>;
-    return <Loading />;
-  }
-  if (!status.ready) return <section className="workspace-state"><p>经营数据暂不可用</p><button type="button" onClick={retry}>重试</button></section>;
-  return <>
-    <PilotHeader replay={status.replay} onStart={startReplay} onPause={pauseReplay} onReset={resetReplay} />
-    {filters && options && <PilotFilters filters={filters} options={options} onChange={setFilters} />}
-    {error && <section className="workspace-state" role="alert"><span>{error.message}</span><button type="button" onClick={retry}>重试</button></section>}
-    {snapshot ? <OperationsPage snapshot={snapshot} /> : isLoading ? <Loading /> : <section className="workspace-state"><p>经营数据暂不可用</p><button type="button" onClick={retry}>重试</button></section>}
-  </>;
+  return <PilotApp />;
 }
 
 function Workspace({ view }: { view: ProductView }): JSX.Element {

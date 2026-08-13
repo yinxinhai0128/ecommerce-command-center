@@ -1,5 +1,13 @@
 # Olist 真实数据试点
 
+## 内部产品边界
+
+本说明仅供仓库维护和验收。产品界面不展示数据来源、许可、试点、演示或模拟数据文案。
+
+数据来自 Olist 官方 Kaggle 页面发布的 *Brazilian E-Commerce Public Dataset by Olist*，适用 CC BY-NC-SA 4.0；使用衍生内容时保留 Olist 归属，并遵守非商业与相同方式共享要求。界面外壳采用 CoreUI，归属见 `THIRD_PARTY_NOTICES.md`。本项目不复制第三方应用的产品文案或界面，仅复用经验证的订单级聚合思路。
+
+导入需要以下 9 张源表：`olist_orders_dataset.csv`、`olist_order_items_dataset.csv`、`olist_order_payments_dataset.csv`、`olist_order_reviews_dataset.csv`、`olist_products_dataset.csv`、`olist_customers_dataset.csv`、`olist_sellers_dataset.csv`、`olist_geolocation_dataset.csv`、`product_category_name_translation.csv`。
+
 本试点把 Olist 发布的匿名历史订单用于本地回放和经营分析。它不是企业店铺、ERP、CRM、广告平台或支付系统的连接器，也不应被视为生产监控系统。
 
 ## 安装、下载、导入与启动
