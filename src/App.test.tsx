@@ -38,7 +38,7 @@ test('实时与分析工作区保持既有切换和分析请求行为', async ()
   expect(fetchMock).toHaveBeenCalledOnce();
   select('实时监控');
   select('智能分析');
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 });
 
 test('全局筛选在实时工作区继续可用', () => {
@@ -81,4 +81,46 @@ test('CoreUI 导航只呈现当前选中的工作区', async () => {
   select('智能分析');
   expect(screen.getByRole('heading', { name: '今日经营结论' })).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: '经营概览' })).not.toBeInTheDocument();
+});
+
+test('经营数据工作区保留筛选、回放控制与数据更新时间', async () => {
+  const metric = { value: 100, comparisonValue: 90, changeRate: 0.1 };
+  let replayIsRunning = false;
+  const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(url);
+    if (path === '/api/pilot/status') return new Response(JSON.stringify({
+      ready: true,
+      range: { start: '2018-01-01', end: '2018-12-31' },
+      replay: { sourceLocalNow: '2018-02-01 12:00:00', isRunning: replayIsRunning },
+    }));
+    if (path === '/api/pilot/filter-options') return new Response(JSON.stringify({ categories: ['家居'], sellerIds: ['seller-1'], customerStates: ['SP'] }));
+    if (path === '/api/pilot/replay') {
+      expect(JSON.parse(init?.body as string)).toEqual({ action: 'start' });
+      replayIsRunning = true;
+      return new Response(JSON.stringify({ sourceLocalNow: '2018-02-01 12:00:00', isRunning: true }));
+    }
+    if (path.startsWith('/api/pilot/snapshot')) return new Response(JSON.stringify({
+      filters: { start: '2018-01-01', end: '2018-12-31' }, sourceLocalNow: '2018-02-01 12:00:00', comparisonLabel: '上期',
+      kpis: { itemGmv: metric, validOrderCount: metric, averageOrderValue: metric, cancellationRate: metric, onTimeDeliveryRate: metric, averageDeliveryDays: metric, averageReviewScore: metric },
+      dailyTrend: [], fulfillmentFunnel: [], categoryRanking: [], sellerRanking: [], customerStateRanking: [], recentOrders: [], capabilities: [],
+      commerce: { paymentAmount: metric, uniqueBuyerCount: metric, repeatBuyerCount: metric },
+      payments: { byType: [], installments: [] },
+      fulfillment: { statusDistribution: [], averageApprovalDays: 0, averageCarrierDays: 0, averageDeliveryDays: 0, lateDeliveryRate: 0, averageLateDays: 0 },
+      experience: { scoreDistribution: [], lowScoreRate: 0, averageReplyDays: 0 },
+      contributions: { categories: [], sellers: [], customerStates: [] },
+    }));
+    throw new Error(`unexpected ${path}`);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+
+  render(<App />);
+  select('经营数据');
+
+  expect(await screen.findByLabelText('经营数据筛选')).toBeInTheDocument();
+  expect(screen.getByText('数据更新时间 2018-02-01 12:00:00')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '开始回放' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '重置回放' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '开始回放' }));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/pilot/replay', expect.objectContaining({ method: 'POST' })));
+  expect(await screen.findByRole('button', { name: '暂停回放' })).toBeInTheDocument();
 });
