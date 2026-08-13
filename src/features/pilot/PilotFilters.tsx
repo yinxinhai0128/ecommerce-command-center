@@ -17,7 +17,7 @@ export function PilotFilters({ filters, options, onChange }: PilotFiltersProps):
 
   function clear(): void { onChange({ start: filters.start, end: filters.end }); }
   return (
-    <form className="global-filters pilot-filters" aria-label="试点筛选" onSubmit={submit}>
+    <form className="global-filters pilot-filters" aria-label="经营数据筛选" onSubmit={submit}>
       <label className="filter-field" htmlFor="pilot-start">开始日期<input id="pilot-start" type="date" value={draft.start} onChange={(event) => setDraft({ ...draft, start: event.target.value })} /></label>
       <label className="filter-field" htmlFor="pilot-end">结束日期<input id="pilot-end" type="date" value={draft.end} onChange={(event) => setDraft({ ...draft, end: event.target.value })} /></label>
       <label className="filter-field" htmlFor="pilot-category">类目<select id="pilot-category" value={draft.category ?? ''} onChange={(event) => setDraft({ ...draft, category: event.target.value || undefined })}><option value="">全部类目</option>{options.categories.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>

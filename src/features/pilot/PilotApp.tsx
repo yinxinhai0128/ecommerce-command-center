@@ -10,8 +10,7 @@ export function PilotApp(): JSX.Element {
   const { status, snapshot, filters, options, isLoading, error, setFilters, retry, startReplay, pauseReplay, resetReplay } = usePilotDashboard();
   if (isLoading && !status) return <p className="pilot-loading" role="status">正在加载运营状态</p>;
   if (!status || !status.ready) {
-    const command = status?.ready === false ? status.importCommand : 'pnpm data:olist:import';
-    return <section className="pilot-import-guide" aria-labelledby="pilot-import-title"><h1 id="pilot-import-title">运营数据准备</h1><p>历史经营数据回放</p><p>本地运营数据尚未准备完毕。请在数据管理流程中执行导入命令。</p><code>{command.replace(/olist/gi, 'data')}</code></section>;
+    return <section className="pilot-import-guide" aria-labelledby="pilot-import-title"><h1 id="pilot-import-title">运营数据准备</h1><p>历史经营数据回放</p><p>本地运营数据尚未准备完毕。请在数据管理流程中执行导入命令。</p></section>;
   }
   if (!snapshot || !filters || !options) return <p className="pilot-loading" role="status">正在加载经营快照</p>;
   return (

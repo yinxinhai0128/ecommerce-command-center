@@ -3,6 +3,7 @@ import { expect, test } from 'vitest';
 import { PilotDashboardContext, type PilotDashboardContextValue } from '../../app/PilotDashboardProvider';
 import { DataSourceSwitch } from '../../ui/DataSourceSwitch';
 import { PilotApp } from './PilotApp';
+import { PilotFilters } from './PilotFilters';
 import { PilotHeader } from './PilotHeader';
 import { PilotRealtimeDashboard } from './PilotRealtimeDashboard';
 
@@ -21,6 +22,18 @@ test('产品页面不暴露数据来源、许可或演示声明', () => {
 
   const { container: app } = render(<PilotDashboardContext.Provider value={unavailableDashboard}><PilotApp /></PilotDashboardContext.Provider>);
   expect(app).not.toHaveTextContent(forbiddenProductCopy);
+  expect(app).toHaveTextContent('请在数据管理流程中执行导入命令。');
+  expect(app).not.toHaveTextContent('pnpm data:data:import');
+  expect(app).not.toHaveTextContent('pnpm data:olist:import');
+
+  const { container: filters } = render(
+    <PilotFilters
+      filters={{ start: '2018-01-01', end: '2018-01-31' }}
+      options={{ categories: [], sellerIds: [], customerStates: [] }}
+      onChange={() => undefined}
+    />,
+  );
+  expect(filters).not.toHaveTextContent(forbiddenProductCopy);
 
   const { container: header } = render(
     <PilotHeader

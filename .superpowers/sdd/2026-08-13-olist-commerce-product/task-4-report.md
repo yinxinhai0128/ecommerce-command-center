@@ -41,3 +41,10 @@
 - RED: the new Enter and Space activation assertions each failed because keyboard activation plus the browser click called the callback twice.
 - GREEN: removed the navigation button's manual `onKeyDown`; native button activation now uses only `onClick`.
 - Verification: `AppShell.test.tsx` 3/3, `pnpm exec tsc --noEmit`, and `git diff --check` passed.
+
+## 产品文案复审修复
+
+- 经营筛选表单的辅助功能名称已从内部阶段性称谓改为中性业务用语“经营数据筛选”。
+- 数据未就绪时不再将内部导入命令或来源标识渲染到产品页面；页面保留“请在数据管理流程中执行导入命令”的可执行引导。
+- `ProductCopy.test.tsx` 真实渲染数据准备状态与筛选组件，验证产品可见和辅助功能文本均不含来源、许可或演示声明，并验证不存在被错误替换的命令。
+- 验证：`ProductCopy.test.tsx` 1/1 通过（threads 单 worker）；`tsc --noEmit` 与 `git diff --check` 均通过。
