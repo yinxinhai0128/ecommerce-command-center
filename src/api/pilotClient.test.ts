@@ -15,6 +15,15 @@ const snapshot = {
   customerStateRanking: [{ customerState: 'SP', itemGmv: 490 }],
   recentOrders: [{ orderId: 'order-1', purchasedAt: '2018-01-01 00:00:00', status: 'delivered', itemGmv: 490, itemCount: 1, customerState: 'SP' }],
   capabilities: [{ key: 'analysis', status: 'available' }],
+  commerce: {
+    paymentAmount: { value: 490, comparisonValue: 400, changeRate: 0.225 },
+    uniqueBuyerCount: { value: 1, comparisonValue: 1, changeRate: 0 },
+    repeatBuyerCount: { value: 0, comparisonValue: 0, changeRate: 0 },
+  },
+  payments: { byType: [], installments: [] },
+  fulfillment: { statusDistribution: [], averageApprovalDays: 0, averageCarrierDays: 0, averageDeliveryDays: 0, lateDeliveryRate: 0, averageLateDays: 0 },
+  experience: { scoreDistribution: [], lowScoreRate: 0, averageReplyDays: 0 },
+  contributions: { categories: [], sellers: [], customerStates: [] },
 };
 
 function response(body: unknown, status = 200): Response {
@@ -27,6 +36,25 @@ test('拒绝嵌套 KPI 非数值的试点快照，防止错误数据进入仪表
   vi.stubGlobal('fetch', vi.fn(async () => response({ ...snapshot, kpis: { ...snapshot.kpis, itemGmv: { value: '490' } } })));
 
   await expect(requestPilotSnapshot(filters)).rejects.toThrow('璇曠偣鏁版嵁鍝嶅簲鏃犳晥');
+});
+
+test('拒绝缺少必填支付、买家、履约、体验或贡献段的试点快照', async () => {
+  const { commerce: _commerce, ...missingCommerce } = snapshot;
+  vi.stubGlobal('fetch', vi.fn(async () => response(missingCommerce)));
+
+  await expect(requestPilotSnapshot(filters)).rejects.toThrow();
+});
+
+test.each([
+  ['commerce 内缺少复购买家数', (() => { const { repeatBuyerCount: _repeatBuyerCount, ...commerce } = snapshot.commerce; return { ...snapshot, commerce }; })()],
+  ['payments.byType 内支付金额不是数值', { ...snapshot, payments: { ...snapshot.payments, byType: [{ paymentType: 'credit_card', paymentAmount: '490' }] } }],
+  ['fulfillment 内缺少延迟送达率', (() => { const { lateDeliveryRate: _lateDeliveryRate, ...fulfillment } = snapshot.fulfillment; return { ...snapshot, fulfillment }; })()],
+  ['experience 内出现未声明字段', { ...snapshot, experience: { ...snapshot.experience, unexpected: true } }],
+  ['contributions.categories 内缺少展示标签', { ...snapshot, contributions: { ...snapshot.contributions, categories: [{ category: 'books', itemGmv: 490, itemCount: 1 }] } }],
+])('深度拒绝%s的试点快照', async (_name, invalid) => {
+  vi.stubGlobal('fetch', vi.fn(async () => response(invalid)));
+
+  await expect(requestPilotSnapshot(filters)).rejects.toThrow();
 });
 
 test('请求快照时仅把筛选条件编码进查询串，防止客户端泄漏或回传快照数据', async () => {

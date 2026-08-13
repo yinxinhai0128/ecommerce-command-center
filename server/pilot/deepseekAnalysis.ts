@@ -45,11 +45,11 @@ function matchesEvidence(value: number, evidence: { value: number; unit: PilotAn
 export function hasOnlyTrustedNumbers(analysis: Pick<AnalysisResult, 'signals' | 'causes'>, context: PilotAnalysisContext) {
   const allowList = trustedEvidenceAllowList(context);
   return analysis.signals.every(({ label, value }) => {
-    const evidence = allowList.signals.find((allowed) => allowed.label === label);
-    return evidence !== undefined && matchesEvidence(value, evidence);
+    const evidence = allowList.signals.filter((allowed) => allowed.label === label);
+    return evidence.length === 1 && matchesEvidence(value, evidence[0]);
   }) && analysis.causes.every(({ label, contribution }) => {
-    const evidence = allowList.causes.find((allowed) => allowed.label === label);
-    return evidence !== undefined && matchesEvidence(contribution, evidence);
+    const evidence = allowList.causes.filter((allowed) => allowed.label === label);
+    return evidence.length === 1 && matchesEvidence(contribution, evidence[0]);
   });
 }
 
@@ -66,7 +66,7 @@ export async function requestPilotDeepSeekAnalysis(options: DeepSeekOptions): Pr
   const messages = [
     {
       role: 'system',
-      content: `只返回 JSON 对象，必须遵循此 JSON schema：${modelSchemaDescription}。signals.label 只能使用 ${JSON.stringify(allowList.signals.map(({ label }) => label))}，且 value 必须复制该同一 label 的数值；causes.label 只能使用 ${JSON.stringify(allowList.causes.map(({ label }) => label))}，且 contribution 必须复制该同一 label 的 itemGmv。`,
+      content: `只返回 JSON 对象，必须遵循此 JSON schema：${modelSchemaDescription}。每个数值必须精确绑定到一个事实的 id、label、unit 和 value；signals.label 只能使用事实 label，且 value 必须复制同一事实；causes.label 只能使用贡献事实 label，且 contribution 必须复制同一事实。signals 可用事实（不得计算新指标）：${JSON.stringify(allowList.signals)}。causes 可用贡献事实：${JSON.stringify(allowList.causes)}。`,
     },
     {
       role: 'user',

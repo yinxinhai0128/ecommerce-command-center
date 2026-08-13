@@ -47,6 +47,24 @@ const snapshot = z.object({
   customerStateRanking: z.array(z.object({ customerState: z.string(), itemGmv: z.number().finite() }).strict()),
   recentOrders: z.array(z.object({ orderId: z.string(), purchasedAt: localDateTime, status: z.string(), itemGmv: z.number().finite(), itemCount: z.number().finite(), customerState: z.string() }).strict()),
   capabilities: z.array(z.object({ key: z.string(), status: z.enum(['available', 'unavailable']), reason: z.string().optional() }).strict()),
+  commerce: z.object({ paymentAmount: kpi, uniqueBuyerCount: kpi, repeatBuyerCount: kpi }).strict(),
+  payments: z.object({
+    byType: z.array(z.object({ paymentType: z.string(), paymentAmount: z.number().finite() }).strict()),
+    installments: z.array(z.object({ installments: z.number().finite(), paymentAmount: z.number().finite() }).strict()),
+  }).strict(),
+  fulfillment: z.object({
+    statusDistribution: z.array(z.object({ status: z.string(), value: z.number().finite() }).strict()),
+    averageApprovalDays: z.number().finite(), averageCarrierDays: z.number().finite(), averageDeliveryDays: z.number().finite(), lateDeliveryRate: z.number().finite(), averageLateDays: z.number().finite(),
+  }).strict(),
+  experience: z.object({
+    scoreDistribution: z.array(z.object({ score: z.number().finite(), value: z.number().finite() }).strict()),
+    lowScoreRate: z.number().finite(), averageReplyDays: z.number().finite(),
+  }).strict(),
+  contributions: z.object({
+    categories: z.array(z.object({ category: z.string(), label: z.string(), itemGmv: z.number().finite(), itemCount: z.number().finite() }).strict()),
+    sellers: z.array(z.object({ sellerId: z.string(), itemGmv: z.number().finite(), validOrderCount: z.number().finite() }).strict()),
+    customerStates: z.array(z.object({ customerState: z.string(), itemGmv: z.number().finite(), validOrderCount: z.number().finite() }).strict()),
+  }).strict(),
 }).strict();
 const analysis = z.object({
   summary: z.string(), signals: z.array(z.object({ label: z.string(), value: z.number().finite(), direction: z.enum(['up', 'down', 'flat']) }).strict()),

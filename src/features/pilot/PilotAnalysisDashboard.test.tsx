@@ -9,6 +9,11 @@ const snapshot: PilotSnapshot = {
   filters, sourceLocalNow: '2018-01-31 00:00:00', comparisonLabel: '较上期',
   kpis: Object.fromEntries(['itemGmv', 'validOrderCount', 'averageOrderValue', 'cancellationRate', 'onTimeDeliveryRate', 'averageDeliveryDays', 'averageReviewScore'].map((key) => [key, { value: 490, comparisonValue: 400, changeRate: 0.225 }])) as PilotSnapshot['kpis'],
   dailyTrend: [], fulfillmentFunnel: [], categoryRanking: [], sellerRanking: [], customerStateRanking: [], recentOrders: [], capabilities: [],
+  commerce: { paymentAmount: { value: 0, comparisonValue: 0, changeRate: 0 }, uniqueBuyerCount: { value: 0, comparisonValue: 0, changeRate: 0 }, repeatBuyerCount: { value: 0, comparisonValue: 0, changeRate: 0 } },
+  payments: { byType: [], installments: [] },
+  fulfillment: { statusDistribution: [], averageApprovalDays: 0, averageCarrierDays: 0, averageDeliveryDays: 0, lateDeliveryRate: 0, averageLateDays: 0 },
+  experience: { scoreDistribution: [], lowScoreRate: 0, averageReplyDays: 0 },
+  contributions: { categories: [], sellers: [], customerStates: [] },
 };
 
 const answer = { summary: '配送表现正常。', signals: [], causes: [], risks: [], actions: [], followUps: [], source: 'local' as const, generatedAt: '2018-01-31T00:00:00Z', metadata: { sourceLocalNow: snapshot.sourceLocalNow } };

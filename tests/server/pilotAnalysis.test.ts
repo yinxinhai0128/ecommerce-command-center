@@ -43,17 +43,29 @@ const snapshot: PilotSnapshot = {
   recentOrders: [],
   capabilities: [],
   commerce: {
-    paymentAmount: { value: 0, comparisonValue: 0, changeRate: 0 },
-    uniqueBuyerCount: { value: 0, comparisonValue: 0, changeRate: 0 },
-    repeatBuyerCount: { value: 0, comparisonValue: 0, changeRate: 0 },
+    paymentAmount: { value: 575, comparisonValue: 500, changeRate: 0.15 },
+    uniqueBuyerCount: { value: 8, comparisonValue: 7, changeRate: 0.1429 },
+    repeatBuyerCount: { value: 2, comparisonValue: 1, changeRate: 1 },
   },
-  payments: { byType: [], installments: [] },
+  payments: {
+    byType: [{ paymentType: 'credit_card', paymentAmount: 420 }, { paymentType: 'boleto', paymentAmount: 155 }],
+    installments: [{ installments: 1, paymentAmount: 155 }, { installments: 3, paymentAmount: 420 }],
+  },
   fulfillment: {
-    statusDistribution: [], averageApprovalDays: 0, averageCarrierDays: 0,
-    averageDeliveryDays: 0, lateDeliveryRate: 0, averageLateDays: 0,
+    statusDistribution: [{ status: 'delivered', value: 8 }, { status: 'carrier', value: 2 }],
+    averageApprovalDays: 0.5, averageCarrierDays: 1,
+    averageDeliveryDays: 4.5, lateDeliveryRate: 0.25, averageLateDays: 2,
   },
-  experience: { scoreDistribution: [], lowScoreRate: 0, averageReplyDays: 0 },
-  contributions: { categories: [], sellers: [], customerStates: [] },
+  experience: {
+    scoreDistribution: [{ score: 1, value: 2 }, { score: 5, value: 8 }],
+    lowScoreRate: 0.2,
+    averageReplyDays: 1.5,
+  },
+  contributions: {
+    categories: [{ category: 'books', label: 'Books', itemGmv: 300, itemCount: 6 }],
+    sellers: [{ sellerId: 'seller-1', itemGmv: 250, validOrderCount: 5 }],
+    customerStates: [{ customerState: 'SP', itemGmv: 350, validOrderCount: 7 }],
+  },
 };
 
 afterEach(async () => {
@@ -70,10 +82,21 @@ async function readyDataDirectory() {
   const database = openPilotDatabase(paths.databasePath);
   createPilotSchema(database);
   database.prepare("INSERT INTO customers VALUES ('customer-1', 'unique-1', '01000', 'Sao Paulo', 'SP')").run();
+  database.prepare("INSERT INTO customers VALUES ('customer-2', 'unique-1', '01000', 'Sao Paulo', 'SP')").run();
+  database.prepare("INSERT INTO customers VALUES ('customer-3', 'unique-3', '01000', 'Sao Paulo', 'SP')").run();
   database.prepare("INSERT INTO sellers VALUES ('seller-1', '01000', 'Sao Paulo', 'SP')").run();
   database.prepare("INSERT INTO products VALUES ('product-1', 'books', NULL, NULL, NULL, NULL, NULL, NULL, NULL)").run();
-  database.prepare("INSERT INTO orders VALUES ('order-1', 'customer-1', 'delivered', '2018-01-01 00:00:00', '2018-01-01 01:00:00', '2018-01-01 02:00:00', '2018-01-02 00:00:00', '2018-01-03 00:00:00')").run();
+  database.prepare("INSERT INTO orders VALUES ('order-1', 'customer-1', 'delivered', '2018-01-01 00:00:00', '2018-01-01 01:00:00', '2018-01-01 02:00:00', '2018-01-02 00:00:00', '2018-01-01 12:00:00')").run();
+  database.prepare("INSERT INTO orders VALUES ('order-2', 'customer-2', 'delivered', '2018-01-10 00:00:00', '2018-01-10 01:00:00', '2018-01-10 02:00:00', '2018-01-11 00:00:00', '2018-01-12 00:00:00')").run();
+  database.prepare("INSERT INTO orders VALUES ('order-3', 'customer-3', 'delivered', '2018-02-01 00:00:00', '2018-02-01 01:00:00', '2018-02-01 02:00:00', '2018-02-02 00:00:00', '2018-02-03 00:00:00')").run();
   database.prepare("INSERT INTO order_items VALUES ('order-1', 1, 'product-1', 'seller-1', '2018-01-01 02:00:00', 490, 0)").run();
+  database.prepare("INSERT INTO order_items VALUES ('order-2', 1, 'product-1', 'seller-1', '2018-01-10 02:00:00', 0, 0)").run();
+  database.prepare("INSERT INTO order_items VALUES ('order-3', 1, 'product-1', 'seller-1', '2018-02-01 02:00:00', 500, 0)").run();
+  database.prepare("INSERT INTO payments VALUES ('order-1', 1, 'credit_card', 3, 420)").run();
+  database.prepare("INSERT INTO payments VALUES ('order-2', 1, 'boleto', 1, 155)").run();
+  database.prepare("INSERT INTO payments VALUES ('order-3', 1, 'credit_card', 3, 500)").run();
+  database.prepare("INSERT INTO reviews VALUES ('review-1', 'order-1', 1, NULL, NULL, '2018-01-03 00:00:00', '2018-01-03 12:00:00')").run();
+  database.prepare("INSERT INTO reviews VALUES ('review-2', 'order-2', 5, NULL, NULL, '2018-01-12 00:00:00', '2018-01-12 12:00:00')").run();
   database.close();
   await writeFile(paths.manifestPath, JSON.stringify({
     ready: true,
@@ -82,7 +105,7 @@ async function readyDataDirectory() {
     source: { dataset: 'olistbr/brazilian-ecommerce', url: 'https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce', license: 'CC BY-NC-SA 4.0' },
     files: {},
     tables: {},
-    range: { start: '2018-01-01 00:00:00', end: '2018-01-31 23:59:59' },
+    range: { start: '2018-01-01 00:00:00', end: '2018-02-28 23:59:59' },
   }));
   return dataDir;
 }
@@ -144,6 +167,43 @@ describe('Olist pilot trusted analysis', () => {
     expect(response.body.signals).toContainEqual(expect.objectContaining({ label: '成交额', value: 490 }));
   });
 
+  test.each([
+    ['支付构成', '信用卡支付构成如何？', '支付方式：credit_card 支付金额', 420],
+    ['复购买家', '复购买家有多少？', '复购买家数', 1],
+    ['延迟配送', '延迟送达情况如何？', '延迟送达率', 0.5],
+    ['低评分', '低评分订单多吗？', '低评分率', 0.5],
+  ])('分析接口将%s问题绑定到本请求快照事实', async (_name, question, label, value) => {
+    const app = createApp({
+      pilot: { dataDir: await readyDataDirectory(), env: {}, now: () => new Date('2026-08-09T00:00:00.000Z') },
+    });
+    applications.push(app);
+
+    const response = await request(app).post('/api/pilot/analysis').send({ question, filters });
+
+    expect(response.status).toBe(200);
+    expect(response.body.metadata).toEqual({ sourceLocalNow: '2018-01-31 00:00:00' });
+    expect(response.body.signals).toContainEqual(expect.objectContaining({ label, value }));
+  });
+
+  test('较早分析响应不会收到之后回放快照的数值', async () => {
+    vi.useFakeTimers();
+    const app = createApp({
+      pilot: { dataDir: await readyDataDirectory(), env: {}, now: () => new Date('2026-08-09T00:00:00.000Z') },
+    });
+    applications.push(app);
+    const replayFilters = { start: '2018-01-01', end: '2018-02-28' };
+
+    const earlier = await request(app).post('/api/pilot/analysis').send({ question: '成交额表现如何？', filters: replayFilters });
+    await request(app).post('/api/pilot/replay').send({ action: 'start' });
+    await vi.advanceTimersByTimeAsync(36_000);
+    const later = await request(app).post('/api/pilot/analysis').send({ question: '成交额表现如何？', filters: replayFilters });
+
+    expect(earlier.body.metadata).toEqual({ sourceLocalNow: '2018-01-31 00:00:00' });
+    expect(earlier.body.signals).toContainEqual(expect.objectContaining({ label: '成交额', value: 490 }));
+    expect(later.body.metadata).toEqual({ sourceLocalNow: '2018-02-03 00:00:00' });
+    expect(later.body.signals).toContainEqual(expect.objectContaining({ label: '成交额', value: 990 }));
+  });
+
   test('本地分析对取消与配送问题返回不同证据和追问', () => {
     const context = buildPilotAnalysisContext(snapshot);
 
@@ -156,6 +216,32 @@ describe('Olist pilot trusted analysis', () => {
     expect(delivery.signals).toContainEqual(expect.objectContaining({ label: '准时送达率', value: 0.8 }));
     expect(delivery.summary).not.toBe(cancellation.summary);
     expect(delivery.followUps).not.toEqual(cancellation.followUps);
+  });
+
+  test.each([
+    ['支付构成', '信用卡支付构成如何？', '支付方式：credit_card 支付金额', 420, (value: number) => ({
+      ...snapshot,
+      payments: { ...snapshot.payments, byType: [{ paymentType: 'credit_card', paymentAmount: value }] },
+    })],
+    ['复购买家', '复购买家有多少？', '复购买家数', 2, (value: number) => ({
+      ...snapshot,
+      commerce: { ...snapshot.commerce, repeatBuyerCount: { value, comparisonValue: 1, changeRate: value - 1 } },
+    })],
+    ['延迟配送', '延迟送达情况如何？', '延迟送达率', 0.25, (value: number) => ({
+      ...snapshot,
+      fulfillment: { ...snapshot.fulfillment, lateDeliveryRate: value },
+    })],
+    ['低评分', '低评分订单多吗？', '低评分率', 0.2, (value: number) => ({
+      ...snapshot,
+      experience: { ...snapshot.experience, lowScoreRate: value },
+    })],
+  ])('本地分析将%s问题绑定到对应快照事实，并随该事实变化', (_name, question, label, value, changedSnapshot) => {
+    const first = analyzeLocally(buildPilotAnalysisContext(snapshot), question, 'not_configured', () => new Date('2026-08-09T00:00:00.000Z'));
+    const second = analyzeLocally(buildPilotAnalysisContext(changedSnapshot(value + 1)), question, 'not_configured', () => new Date('2026-08-09T00:00:00.000Z'));
+
+    expect(first.signals).toContainEqual(expect.objectContaining({ label, value }));
+    expect(second.signals).toContainEqual(expect.objectContaining({ label, value: value + 1 }));
+    expect(second.summary).not.toBe(first.summary);
   });
 
   test.each([
@@ -188,8 +274,8 @@ describe('Olist pilot trusted analysis', () => {
 
     expect(Buffer.byteLength(JSON.stringify(first), 'utf8')).toBeLessThan(30 * 1024);
     expect(second).toEqual(first);
-    expect(first.facts).toHaveLength(14);
-    expect(first.trendChanges).toHaveLength(7);
+    expect(first.facts).toHaveLength(41);
+    expect(first.trendChanges).toHaveLength(10);
     for (const dimension of ['category', 'seller', 'customerState'] as const) {
       const dimensionContributors = first.contributors.filter((item) => item.dimension === dimension);
       expect(dimensionContributors).toHaveLength(12);
@@ -406,5 +492,33 @@ describe('Olist pilot trusted analysis', () => {
     });
     expect(response.body.signals).toContainEqual(expect.objectContaining({ value: 490 }));
     expect(JSON.stringify(response.body)).not.toContain('123456789');
+  });
+
+  test.each([
+    ['将复购买家数 1 冒充支付金额', { label: '支付金额', value: 1, direction: 'up' }],
+    ['使用快照外数值', { label: '支付金额', value: 123_456_789, direction: 'up' }],
+  ])('DeepSeek %s时回退到事实绑定的本地分析', async (_name, signal) => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({ ...modelResult(490), signals: [signal] }) } }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const app = createApp({
+      pilot: {
+        dataDir: await readyDataDirectory(),
+        fetchImpl,
+        env: { DEEPSEEK_API_KEY: 'server-key' },
+        now: () => new Date('2026-08-09T00:00:00.000Z'),
+      },
+    });
+    applications.push(app);
+
+    const response = await request(app).post('/api/pilot/analysis').send({ question: '信用卡支付构成如何？', filters });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      source: 'local',
+      fallbackReason: 'invalid_response',
+      metadata: { sourceLocalNow: '2018-01-31 00:00:00' },
+    });
+    expect(response.body.signals).toContainEqual(expect.objectContaining({ label: '支付方式：credit_card 支付金额', value: 420 }));
   });
 });
