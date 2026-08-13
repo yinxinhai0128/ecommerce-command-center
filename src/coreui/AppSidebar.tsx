@@ -21,12 +21,6 @@ export function AppSidebar({ activeView, collapsed, onViewChange }: AppSidebarPr
                 className="coreui-shell-nav-button"
                 color="link"
                 onClick={() => onViewChange(view)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    onViewChange(view);
-                  }
-                }}
                 type="button"
               >
                 {label}

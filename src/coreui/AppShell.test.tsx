@@ -28,8 +28,32 @@ test('导航可访问并将用户选择通知给受控调用方', () => {
   fireEvent.click(screen.getByRole('button', { name: '收起导航' }));
   expect(screen.getByRole('button', { name: '展开导航' })).toBeInTheDocument();
 
-  fireEvent.keyDown(screen.getByRole('button', { name: '智能分析' }), { key: 'Enter' });
+  fireEvent.click(screen.getByRole('button', { name: '智能分析' }));
   expect(onViewChange).toHaveBeenCalledWith('analysis');
 
   expect(screen.getByRole('main')).toHaveTextContent('页面内容');
+});
+
+test('导航原生按钮通过 Enter 仅激活一次', () => {
+  const onViewChange = vi.fn();
+  render(<AppShell activeView="overview" onViewChange={onViewChange}><p>页面内容</p></AppShell>);
+
+  const analysisButton = screen.getByRole('button', { name: '智能分析' });
+  fireEvent.keyDown(analysisButton, { key: 'Enter' });
+  fireEvent.click(analysisButton);
+
+  expect(onViewChange).toHaveBeenCalledTimes(1);
+  expect(onViewChange).toHaveBeenCalledWith('analysis');
+});
+
+test('导航原生按钮通过 Space 仅激活一次', () => {
+  const onViewChange = vi.fn();
+  render(<AppShell activeView="overview" onViewChange={onViewChange}><p>页面内容</p></AppShell>);
+
+  const analysisButton = screen.getByRole('button', { name: '智能分析' });
+  fireEvent.keyDown(analysisButton, { key: ' ' });
+  fireEvent.click(analysisButton);
+
+  expect(onViewChange).toHaveBeenCalledTimes(1);
+  expect(onViewChange).toHaveBeenCalledWith('analysis');
 });

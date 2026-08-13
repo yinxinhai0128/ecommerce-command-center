@@ -35,3 +35,9 @@
 - 仅追加壳层样式与 README 内部文档链接；未修改应用接入、Provider 或业务功能。
 - 验证：`git diff --check` 通过；主任务运行 `node ...tsc --noEmit` exit 0，运行 `node ...vite build` exit 0（仅既有大代码块警告）。
 - 提交待创建。
+
+## Native navigation keyboard fix
+
+- RED: the new Enter and Space activation assertions each failed because keyboard activation plus the browser click called the callback twice.
+- GREEN: removed the navigation button's manual `onKeyDown`; native button activation now uses only `onClick`.
+- Verification: `AppShell.test.tsx` 3/3, `pnpm exec tsc --noEmit`, and `git diff --check` passed.
