@@ -26,7 +26,7 @@ test('independently reconciles counts, range, and eligible item GMV', async () =
 
   expect(verifyOlistDataset({ dataDir })).toMatchObject({
     valid: true,
-    tableRows: { orders: 8, orderItems: 9, reviews: 7, products: 8, customers: 2, sellers: 2, categoryTranslations: 2 },
+    tableRows: { orders: 8, orderItems: 9, reviews: 7, products: 8, customers: 2, sellers: 2, categoryTranslations: 2, payments: 2, geolocations: 2 },
     itemGmv: 363.75,
     duplicatePrimaryKeys: 0,
     orphanReferences: 0,
@@ -45,6 +45,8 @@ test('counts duplicate category translation primary keys', async () => {
     CREATE TABLE customers (customer_id TEXT);
     CREATE TABLE sellers (seller_id TEXT);
     CREATE TABLE category_translations (category_name TEXT);
+    CREATE TABLE payments (order_id TEXT, payment_sequential INTEGER);
+    CREATE TABLE geolocations (zip_code_prefix TEXT);
     INSERT INTO orders VALUES ('o1', 'c1', 'delivered', '2017-01-01 10:00:00');
     INSERT INTO customers VALUES ('c1');
     INSERT INTO category_translations VALUES ('category_a'), ('category_a');
@@ -52,4 +54,46 @@ test('counts duplicate category translation primary keys', async () => {
   database.close();
 
   expect(verifyOlistDatabase(databasePath)).toMatchObject({ valid: false, duplicatePrimaryKeys: 1 });
+});
+
+test('marks duplicate payment sequence keys invalid', async () => {
+  const databasePath = join(await temporaryDirectory(), 'duplicate-payments.sqlite');
+  const database = openPilotDatabase(databasePath);
+  database.exec(`
+    CREATE TABLE orders (order_id TEXT, customer_id TEXT, order_status TEXT, purchase_at TEXT);
+    CREATE TABLE order_items (order_id TEXT, order_item_id INTEGER, product_id TEXT, seller_id TEXT, price REAL);
+    CREATE TABLE reviews (review_id TEXT, order_id TEXT);
+    CREATE TABLE products (product_id TEXT);
+    CREATE TABLE customers (customer_id TEXT);
+    CREATE TABLE sellers (seller_id TEXT);
+    CREATE TABLE category_translations (category_name TEXT);
+    CREATE TABLE payments (order_id TEXT, payment_sequential INTEGER);
+    CREATE TABLE geolocations (zip_code_prefix TEXT);
+    INSERT INTO orders VALUES ('o1', 'c1', 'delivered', '2017-01-01 10:00:00');
+    INSERT INTO customers VALUES ('c1');
+    INSERT INTO payments VALUES ('o1', 1), ('o1', 1);
+  `);
+  database.close();
+
+  expect(verifyOlistDatabase(databasePath)).toMatchObject({ valid: false, duplicatePrimaryKeys: 1 });
+});
+
+test('marks payment order references that are absent invalid', async () => {
+  const databasePath = join(await temporaryDirectory(), 'orphan-payments.sqlite');
+  const database = openPilotDatabase(databasePath);
+  database.exec(`
+    CREATE TABLE orders (order_id TEXT, customer_id TEXT, order_status TEXT, purchase_at TEXT);
+    CREATE TABLE order_items (order_id TEXT, order_item_id INTEGER, product_id TEXT, seller_id TEXT, price REAL);
+    CREATE TABLE reviews (review_id TEXT, order_id TEXT);
+    CREATE TABLE products (product_id TEXT);
+    CREATE TABLE customers (customer_id TEXT);
+    CREATE TABLE sellers (seller_id TEXT);
+    CREATE TABLE category_translations (category_name TEXT);
+    CREATE TABLE payments (order_id TEXT, payment_sequential INTEGER);
+    CREATE TABLE geolocations (zip_code_prefix TEXT);
+    INSERT INTO payments VALUES ('missing-order', 1);
+  `);
+  database.close();
+
+  expect(verifyOlistDatabase(databasePath)).toMatchObject({ valid: false, orphanReferences: 1 });
 });

@@ -3,7 +3,7 @@ import type { OlistVerification, VerifyOptions } from './contracts';
 import { openPilotDatabase } from './database';
 import { resolveOlistPaths } from './paths';
 
-const tables = { orders: 'orders', orderItems: 'order_items', reviews: 'reviews', products: 'products', customers: 'customers', sellers: 'sellers', categoryTranslations: 'category_translations' } as const;
+const tables = { orders: 'orders', orderItems: 'order_items', reviews: 'reviews', products: 'products', customers: 'customers', sellers: 'sellers', categoryTranslations: 'category_translations', payments: 'payments', geolocations: 'geolocations' } as const;
 
 function value(database: DatabaseSync, sql: string): number {
   return Number((database.prepare(sql).get() as { value: number }).value);
@@ -21,6 +21,7 @@ export function verifyOlistDatabase(databasePath: string): OlistVerification {
         UNION ALL SELECT product_id FROM products GROUP BY product_id HAVING COUNT(*) > 1
         UNION ALL SELECT review_id FROM reviews GROUP BY review_id HAVING COUNT(*) > 1
         UNION ALL SELECT order_id || ':' || order_item_id FROM order_items GROUP BY order_id, order_item_id HAVING COUNT(*) > 1
+        UNION ALL SELECT order_id || ':' || payment_sequential FROM payments GROUP BY order_id, payment_sequential HAVING COUNT(*) > 1
         UNION ALL SELECT category_name FROM category_translations GROUP BY category_name HAVING COUNT(*) > 1
       )
     `);
@@ -30,6 +31,7 @@ export function verifyOlistDatabase(databasePath: string): OlistVerification {
         UNION ALL SELECT items.product_id FROM order_items items LEFT JOIN products ON products.product_id = items.product_id WHERE products.product_id IS NULL
         UNION ALL SELECT items.seller_id FROM order_items items LEFT JOIN sellers ON sellers.seller_id = items.seller_id WHERE sellers.seller_id IS NULL
         UNION ALL SELECT reviews.order_id FROM reviews LEFT JOIN orders ON orders.order_id = reviews.order_id WHERE orders.order_id IS NULL
+        UNION ALL SELECT payments.order_id FROM payments LEFT JOIN orders ON orders.order_id = payments.order_id WHERE orders.order_id IS NULL
         UNION ALL SELECT orders.customer_id FROM orders LEFT JOIN customers ON customers.customer_id = orders.customer_id WHERE customers.customer_id IS NULL
       )
     `);

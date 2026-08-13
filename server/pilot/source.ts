@@ -7,8 +7,8 @@ import { resolveOlistPaths } from './paths';
 
 const downloadUrl = 'https://www.kaggle.com/api/v1/datasets/download/olistbr/brazilian-ecommerce';
 const officialDatasetUrl = 'https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce';
-const manualDownloadGuide = `请登录 ${officialDatasetUrl} 手动下载官方归档，将七个 CSV 解压到 var/olist/source 后运行 pnpm data:olist:import。`;
-const requiredFiles = new Set(['olist_orders_dataset.csv', 'olist_order_items_dataset.csv', 'olist_order_reviews_dataset.csv', 'olist_products_dataset.csv', 'olist_customers_dataset.csv', 'olist_sellers_dataset.csv', 'product_category_name_translation.csv']);
+const manualDownloadGuide = `请登录 ${officialDatasetUrl} 手动下载官方归档，将九个 CSV 解压到 var/olist/source 后运行 pnpm data:olist:import。`;
+const requiredFiles = new Set(['olist_orders_dataset.csv', 'olist_order_items_dataset.csv', 'olist_order_reviews_dataset.csv', 'olist_products_dataset.csv', 'olist_customers_dataset.csv', 'olist_sellers_dataset.csv', 'product_category_name_translation.csv', 'olist_order_payments_dataset.csv', 'olist_geolocation_dataset.csv']);
 
 export async function downloadOlistSource({ dataDir, fetchImpl = fetch }: DownloadOptions): Promise<OlistSourceReceipt> {
   let response: Response;

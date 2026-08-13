@@ -16,6 +16,8 @@ const files = {
   customers: 'olist_customers_dataset.csv',
   sellers: 'olist_sellers_dataset.csv',
   categoryTranslations: 'product_category_name_translation.csv',
+  payments: 'olist_order_payments_dataset.csv',
+  geolocations: 'olist_geolocation_dataset.csv',
 } as const;
 
 type Row = Record<string, string>;
@@ -60,6 +62,8 @@ export async function importOlistDataset({ sourceDir, dataDir, now = new Date() 
     for (const row of parsed.products) insert(database, 'INSERT INTO products VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [row.product_id, row.product_category_name || null, numberOrNull(row.product_name_lenght), numberOrNull(row.product_description_lenght), numberOrNull(row.product_photos_qty), numberOrNull(row.product_weight_g), numberOrNull(row.product_length_cm), numberOrNull(row.product_height_cm), numberOrNull(row.product_width_cm)]);
     for (const row of parsed.orders) insert(database, 'INSERT INTO orders VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [row.order_id, row.customer_id, row.order_status, timestamp(row.order_purchase_timestamp), timestamp(row.order_approved_at), timestamp(row.order_delivered_carrier_date), timestamp(row.order_delivered_customer_date), timestamp(row.order_estimated_delivery_date)]);
     for (const row of parsed.orderItems) insert(database, 'INSERT INTO order_items VALUES (?, ?, ?, ?, ?, ?, ?)', [row.order_id, Number(row.order_item_id), row.product_id, row.seller_id, timestamp(row.shipping_limit_date), Number(row.price), Number(row.freight_value)]);
+    for (const row of parsed.payments) insert(database, 'INSERT INTO payments VALUES (?, ?, ?, ?, ?)', [row.order_id, Number(row.payment_sequential), row.payment_type, Number(row.payment_installments), Number(row.payment_value)]);
+    for (const row of parsed.geolocations) insert(database, 'INSERT INTO geolocations VALUES (?, ?, ?, ?, ?)', [row.geolocation_zip_code_prefix, Number(row.geolocation_lat), Number(row.geolocation_lng), row.geolocation_city, row.geolocation_state]);
     for (const row of parsed.reviews) insert(database, 'INSERT INTO reviews VALUES (?, ?, ?, ?, ?, ?, ?)', [row.review_id, row.order_id, Number(row.review_score), row.review_comment_title || null, row.review_comment_message || null, timestamp(row.review_creation_date), timestamp(row.review_answer_timestamp)]);
     const importedAt = now.toISOString();
     insert(database, 'INSERT INTO replay_state VALUES (1, ?)', [importedAt]);
