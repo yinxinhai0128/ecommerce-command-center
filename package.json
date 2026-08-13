@@ -12,6 +12,10 @@
     "data:olist:verify": "tsx scripts/olist-verify.ts"
   },
   "dependencies": {
+    "@coreui/coreui": "5.9.0",
+    "@coreui/icons": "3.1.0",
+    "@coreui/icons-react": "2.3.0",
+    "@coreui/react": "5.13.0",
     "csv-parse": "^7.0.2",
     "echarts": "^6.1.0",
     "echarts-for-react": "^3.0.6",

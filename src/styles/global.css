@@ -34,6 +34,22 @@ select:focus-visible {
   border: 0;
 }
 
+.coreui-shell { display: flex; min-height: 100vh; min-width: 0; background: var(--bg-app); }
+.coreui-shell-sidebar { flex: 0 0 216px; min-width: 0; padding: 16px 12px; background: var(--bg-panel); border-right: 1px solid var(--border); }
+.coreui-shell-brand { display: block; padding: 0 8px 16px; color: var(--text-primary); font-weight: 600; }
+.coreui-shell-nav { display: grid; gap: 4px; padding: 0; margin: 0; list-style: none; }
+.coreui-shell-nav-button, .coreui-shell-toggle { width: 100%; border: 0; padding: 8px; background: transparent; color: var(--text-muted); text-align: left; cursor: pointer; }
+.coreui-shell-nav-button[aria-current="page"] { background: var(--bg-app); color: var(--text-primary); }
+.coreui-shell-wrapper { flex: 1 1 auto; min-width: 0; }
+.coreui-shell-topbar { min-width: 0; border-bottom: 1px solid var(--border); background: var(--bg-panel); }
+.coreui-shell-topbar-content { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 16px; }
+.coreui-shell-topbar h1 { margin: 0; color: var(--text-primary); font-size: 18px; font-weight: 600; }
+.coreui-shell-toggle { width: auto; color: var(--text-primary); }
+.coreui-shell-main { min-width: 0; }
+.coreui-shell-main > .container-fluid { min-width: 0; padding: 0; }
+.coreui-shell.is-collapsed .coreui-shell-sidebar { display: none; }
+@media (max-width: 390px) { .coreui-shell-topbar-content { padding: 0 12px; } .coreui-shell-topbar h1 { font-size: 16px; } }
+
 .dashboard-app {
   min-height: 100vh;
   min-width: 0;
