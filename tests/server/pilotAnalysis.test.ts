@@ -168,6 +168,42 @@ describe('Olist pilot trusted analysis', () => {
     expect(response.body).toMatchObject({ source: 'deepseek', summary: '成交额为 490。' });
   });
 
+  test('DeepSeek 文本中的错误声明不能借用另一分句的事实绑定', async () => {
+    const summary = '成交额为490，平均评分为490。';
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({ ...modelResult(490), summary }) } }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const app = createApp({
+      pilot: {
+        dataDir: await readyDataDirectory(), fetchImpl, env: { DEEPSEEK_API_KEY: 'server-key' },
+        now: () => new Date('2026-08-09T00:00:00.000Z'),
+      },
+    });
+    applications.push(app);
+
+    const response = await request(app).post('/api/pilot/analysis').send({ question: '表现如何？', filters });
+
+    expect(response.body).toMatchObject({ source: 'local', fallbackReason: 'invalid_response' });
+  });
+
+  test('DeepSeek 文本允许事实 label 自带的受控数字并绑定同片支付金额', async () => {
+    const summary = '分期：3期 支付金额为420。';
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({ ...modelResult(490), summary }) } }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const app = createApp({
+      pilot: {
+        dataDir: await readyDataDirectory(), fetchImpl, env: { DEEPSEEK_API_KEY: 'server-key' },
+        now: () => new Date('2026-08-09T00:00:00.000Z'),
+      },
+    });
+    applications.push(app);
+
+    const response = await request(app).post('/api/pilot/analysis').send({ question: '3期分期支付情况如何？', filters });
+
+    expect(response.body).toMatchObject({ source: 'deepseek', summary });
+  });
+
   test.each([
     ['summary 中的陌生预测数值', { summary: '预计明日销售 123456789。' }],
     ['risk 中的禁止指标', { risks: [{ severity: 'warning', title: '毛利率风险', evidence: '毛利率为 30%。' }] }],

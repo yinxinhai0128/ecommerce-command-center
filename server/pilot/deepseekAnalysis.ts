@@ -66,6 +66,10 @@ function normalizeText(value: string) {
   return value.normalize('NFKC').replace(/\p{Cf}/gu, '').toLowerCase();
 }
 
+function claimSegments(value: string) {
+  return normalizeText(value).split(/[。！？!?；;，,\r\n]+|\.(?!\d)/u).filter(Boolean);
+}
+
 function textFields(analysis: PilotModelAnalysis) {
   return [
     analysis.summary,
@@ -81,15 +85,33 @@ function hasOnlyTrustedTextClaims(analysis: PilotModelAnalysis, context: PilotAn
   return textFields(analysis).every((value) => {
     const normalizedText = normalizeText(value);
     if (prohibitedClaims.test(normalizedText)) return false;
-    return (normalizedText.match(numericClaim) ?? []).every((token) => {
-      const isPercent = token.endsWith('%');
-      const numeric = Number(token.replace(/,/g, '').replace('%', ''));
-      return allowed.some((evidence) => {
-        const labels = [evidence.label, ...(englishDisplayNames[evidence.label] ?? [])].map(normalizeText);
-        const matchesValue = isPercent
-          ? evidence.unit === 'ratio' && Object.is(numeric / 100, evidence.value)
-          : Object.is(numeric, evidence.value);
-        return matchesValue && labels.some((label) => normalizedText.includes(label));
+    return claimSegments(normalizedText).every((segment) => {
+      const evidenceLabels = allowed.map((evidence) => ({
+        evidence,
+        labels: [evidence.label, ...(englishDisplayNames[evidence.label] ?? [])].map(normalizeText).filter((label) => segment.includes(label)),
+      }));
+      return [...segment.matchAll(numericClaim)].every((match) => {
+        const token = match[0];
+        const tokenStart = match.index;
+        const tokenEnd = tokenStart + token.length;
+        const isControlledLabelNumber = evidenceLabels.some(({ labels }) => labels.some((label) => {
+          let labelStart = segment.indexOf(label);
+          while (labelStart >= 0) {
+            if (tokenStart >= labelStart && tokenEnd <= labelStart + label.length) return true;
+            labelStart = segment.indexOf(label, labelStart + 1);
+          }
+          return false;
+        }));
+        if (isControlledLabelNumber) return true;
+
+        const isPercent = token.endsWith('%');
+        const numeric = Number(token.replace(/,/g, '').replace('%', ''));
+        return evidenceLabels.some(({ evidence, labels }) => {
+          const matchesValue = isPercent
+            ? evidence.unit === 'ratio' && Object.is(numeric / 100, evidence.value)
+            : Object.is(numeric, evidence.value);
+          return matchesValue && labels.length > 0;
+        });
       });
     });
   });
