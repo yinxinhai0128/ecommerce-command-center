@@ -56,7 +56,7 @@ function createRepository() {
   return createPilotRepository(database);
 }
 
-function createCommerceRepository() {
+function createCommerceRepository(extraSql = '') {
   const database = new DatabaseSync(':memory:');
   databases.push(database);
   createPilotSchema(database);
@@ -94,6 +94,7 @@ function createCommerceRepository() {
       ('review-3', 'voucher', 3, NULL, NULL, '2018-01-04 12:00:00', '2018-01-05 12:00:00'),
       ('review-4', 'canceled', 4, NULL, NULL, '2018-01-04 12:00:00', '2018-01-05 12:00:00'),
       ('review-5', 'future', 5, NULL, NULL, '2018-01-06 12:00:00', '2018-01-07 12:00:00');
+    ${extraSql}
   `);
   return createPilotRepository(database);
 }
@@ -163,6 +164,43 @@ test('excludes future deliveries and reviews from replay-bounded metrics', () =>
   });
 });
 
+test('does not expose a future delivery as completed before its delivery fact', () => {
+  // Reading orders.order_status before delivered_at must fail this replay-boundary contract.
+  const repository = createCommerceRepository();
+  const beforeDelivery = repository.getSnapshot({ start: '2018-01-02', end: '2018-01-02' }, '2018-01-04 23:59:59');
+  const afterDelivery = repository.getSnapshot({ start: '2018-01-02', end: '2018-01-02' }, '2018-01-05 10:00:00');
+  const comparison = repository.getSnapshot({ start: '2018-01-03', end: '2018-01-03' }, '2018-01-04 23:59:59');
+
+  expect(beforeDelivery.fulfillment.statusDistribution).toEqual([{ status: 'carrier', value: 1 }]);
+  expect(beforeDelivery.fulfillmentFunnel).toEqual([
+    { stage: 'purchased', value: 1 },
+    { stage: 'approved', value: 1 },
+    { stage: 'carrier', value: 1 },
+    { stage: 'delivered', value: 0 },
+  ]);
+  expect(beforeDelivery.dailyTrend).toEqual([{ date: '2018-01-02', itemGmv: 0, validOrderCount: 0 }]);
+  expect(beforeDelivery.kpis.itemGmv.value).toBe(0);
+  expect(beforeDelivery.kpis.validOrderCount.value).toBe(0);
+  expect(beforeDelivery.contributions.categories).toEqual([]);
+  expect(beforeDelivery.recentOrders[0]?.status).toBe('carrier');
+  expect(comparison.kpis.itemGmv.comparisonValue).toBe(0);
+  expect(comparison.kpis.validOrderCount.comparisonValue).toBe(0);
+
+  expect(afterDelivery.fulfillment.statusDistribution).toEqual([{ status: 'delivered', value: 1 }]);
+  expect(afterDelivery.dailyTrend).toEqual([{ date: '2018-01-02', itemGmv: 120, validOrderCount: 1 }]);
+  expect(afterDelivery.kpis.itemGmv.value).toBe(120);
+  expect(afterDelivery.contributions.categories).toEqual([{ category: 'books', label: 'Books', itemGmv: 120, itemCount: 1 }]);
+});
+
+test('uses distinct reviewed orders as the low-score-rate denominator', () => {
+  // Dividing low reviews by review rows instead of distinct reviewed orders must fail this test.
+  const snapshot = createCommerceRepository(`
+    INSERT INTO reviews VALUES ('review-1-five', 'multi', 5, NULL, NULL, '2018-01-04 12:00:00', '2018-01-04 13:00:00');
+  `).getSnapshot({ start: '2018-01-01', end: '2018-01-01' }, '2018-01-04 23:59:59');
+
+  expect(snapshot.experience.lowScoreRate).toBe(1);
+});
+
 test('calculates only metrics supported by Olist facts', () => {
   // Removing a delivered order from the KPI cohort must fail this test.
   const snapshot = createRepository().getSnapshot(filters, replayNow);
@@ -221,11 +259,14 @@ test('caps the inclusive end date at replay time and returns zero for empty deno
 });
 
 test('keeps a replay timestamp as source-local wall time', () => {
-  // Parsing a source-local replay timestamp as UTC must fail this test.
-  const snapshot = createRepository().getSnapshot({ start: '2018-01-01', end: '2018-01-31' }, '2018-01-04 12:00:00');
+  // Reading future delivery facts at an earlier source-local replay timestamp must fail this test.
+  const repository = createRepository();
+  const snapshot = repository.getSnapshot({ start: '2018-01-01', end: '2018-01-31' }, '2018-01-04 12:00:00');
+  const afterDeliveries = repository.getSnapshot({ start: '2018-01-01', end: '2018-01-31' }, '2018-01-13 00:00:00');
 
   expect(snapshot.sourceLocalNow).toBe('2018-01-04 12:00:00');
-  expect(snapshot.kpis.itemGmv.value).toBe(490);
+  expect(snapshot.kpis.itemGmv.value).toBe(0);
+  expect(afterDeliveries.kpis.itemGmv.value).toBe(490);
 });
 
 test('compares with the immediately preceding equal-length calendar interval', () => {
@@ -248,18 +289,26 @@ test('keeps unitemized orders in an unfiltered cohort', () => {
       ('delivered', 'customer', 'delivered', '2018-01-01 11:00:00', NULL, NULL, '2018-01-02 11:00:00', '2018-01-03 11:00:00');
   `);
 
-  const snapshot = createPilotRepository(database).getSnapshot({ start: '2018-01-01', end: '2018-01-01' }, '2018-01-01 23:59:59');
+  const repository = createPilotRepository(database);
+  const snapshot = repository.getSnapshot({ start: '2018-01-01', end: '2018-01-01' }, '2018-01-01 23:59:59');
+  const afterDelivery = repository.getSnapshot({ start: '2018-01-01', end: '2018-01-01' }, '2018-01-02 11:00:00');
 
   expect(snapshot.kpis.cancellationRate.value).toBe(1 / 2);
   expect(snapshot.fulfillmentFunnel).toEqual([
     { stage: 'purchased', value: 2 },
     { stage: 'approved', value: 0 },
     { stage: 'carrier', value: 0 },
-    { stage: 'delivered', value: 1 },
+    { stage: 'delivered', value: 0 },
   ]);
   expect(snapshot.recentOrders.map((order) => [order.orderId, order.itemGmv, order.itemCount])).toEqual([
     ['delivered', 0, 0],
     ['canceled', 0, 0],
+  ]);
+  expect(afterDelivery.fulfillmentFunnel).toEqual([
+    { stage: 'purchased', value: 2 },
+    { stage: 'approved', value: 0 },
+    { stage: 'carrier', value: 0 },
+    { stage: 'delivered', value: 1 },
   ]);
 });
 

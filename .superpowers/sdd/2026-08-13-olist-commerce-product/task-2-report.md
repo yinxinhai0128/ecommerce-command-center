@@ -25,3 +25,18 @@
 - 新分组和原有排名、趋势、漏斗均共用同一受日期、类目、卖家、客户州和回放上限约束的订单集。
 - 新分组在服务端 `PilotSnapshot` 里暂为可选：当前后续 API/分析测试夹具仍只构造旧快照，而本任务文件范围不含那些夹具。仓储实际始终返回全部新分组；后续 API 契约任务应将其收紧为必填。
 - `vite.config.ts` 是为使简报指定的 `server/pilot/metricDefinitions.test.ts` 实际被 Vitest 收集而获得的最小授权改动。
+
+## 修复轮 1：回放安全与必填契约
+
+### RED
+
+- `does not expose a future delivery as completed before its delivery fact` 在 `2018-01-04 23:59:59` 回放时实际得到 `[{ status: 'delivered', value: 1 }]`，而手算期望为 `carrier`；证明仓储直接读取了未来的最终状态。
+- `uses distinct reviewed orders as the low-score-rate denominator` 实际得到 `0.5`，而同一订单的 1 分和 5 分评价应使低分率为 `1`；证明原 SQL 用了评价行数而非不同订单数。
+- 主任务复验旧仓储测试还发现两项与新语义冲突：1 月 4 日回放错误期待未来送达的 GMV 为 `490`，以及 1 月 1 日回放错误期待 1 月 2 日送达已进入漏斗。
+
+### GREEN
+
+- 订单集新增 `known_status`：仅在 `delivered_at <= replayNow` 时为 `delivered`；否则按已知 `carrier_at`、`approved_at`、购买事实映射。兼容 KPI、历史对比、趋势、漏斗、状态分布、贡献和近期订单均使用此状态。
+- `lowScoreRate` 改为 `COUNT(DISTINCT CASE WHEN review_score IN (1, 2) THEN reviews.order_id END) / COUNT(DISTINCT reviews.order_id)`。
+- 新分组已从 `PilotSnapshot` 可选改为必填。TypeScript 首次仅报 `tests/server/pilotAnalysis.test.ts(20,7)` 缺失五个分组；经授权为该 Task 3 测试夹具补充零/空安全值，未改任何 Task 3 生产代码。
+- 验证结果：仓储 18/18、指标定义 1/1、`pilotAnalysis` 26/26 通过；`tsc --noEmit` 与 `git diff --check` 通过。

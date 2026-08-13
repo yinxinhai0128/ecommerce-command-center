@@ -42,6 +42,18 @@ const snapshot: PilotSnapshot = {
   customerStateRanking: [{ customerState: 'SP', itemGmv: 350 }],
   recentOrders: [],
   capabilities: [],
+  commerce: {
+    paymentAmount: { value: 0, comparisonValue: 0, changeRate: 0 },
+    uniqueBuyerCount: { value: 0, comparisonValue: 0, changeRate: 0 },
+    repeatBuyerCount: { value: 0, comparisonValue: 0, changeRate: 0 },
+  },
+  payments: { byType: [], installments: [] },
+  fulfillment: {
+    statusDistribution: [], averageApprovalDays: 0, averageCarrierDays: 0,
+    averageDeliveryDays: 0, lateDeliveryRate: 0, averageLateDays: 0,
+  },
+  experience: { scoreDistribution: [], lowScoreRate: 0, averageReplyDays: 0 },
+  contributions: { categories: [], sellers: [], customerStates: [] },
 };
 
 afterEach(async () => {

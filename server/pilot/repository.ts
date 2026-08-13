@@ -77,11 +77,19 @@ const filteredOrdersCte = `
       AND ((:category IS NULL AND :sellerId IS NULL) OR matching_items.order_id IS NOT NULL)
   ),
   selected_orders AS (
-    SELECT *, CASE
-      WHEN :category IS NULL AND :sellerId IS NULL THEN payment_amount
-      WHEN all_order_item_gmv = 0 THEN 0
-      ELSE payment_amount * item_gmv / all_order_item_gmv
-    END AS selected_payment_amount
+    SELECT *,
+      CASE
+        WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow THEN 'delivered'
+        WHEN carrier_at IS NOT NULL AND carrier_at <= :replayNow THEN 'carrier'
+        WHEN approved_at IS NOT NULL AND approved_at <= :replayNow THEN 'approved'
+        WHEN order_status = 'delivered' THEN 'purchased'
+        ELSE order_status
+      END AS known_status,
+      CASE
+        WHEN :category IS NULL AND :sellerId IS NULL THEN payment_amount
+        WHEN all_order_item_gmv = 0 THEN 0
+        ELSE payment_amount * item_gmv / all_order_item_gmv
+      END AS selected_payment_amount
     FROM filtered_orders
     WHERE :replayNow IS NOT NULL
   )
@@ -146,11 +154,11 @@ function parameters(filters: PilotFilters, start: string, end: string, replayNow
 function summary(database: DatabaseSync, queryParameters: QueryParameters): SummaryRow {
   return database.prepare(`${filteredOrdersCte}
     SELECT
-      COALESCE(SUM(CASE WHEN order_status = 'delivered' THEN item_gmv ELSE 0 END), 0) AS itemGmv,
-      COALESCE(SUM(CASE WHEN order_status = 'delivered' THEN 1 ELSE 0 END), 0) AS validOrderCount,
+      COALESCE(SUM(CASE WHEN known_status = 'delivered' THEN item_gmv ELSE 0 END), 0) AS itemGmv,
+      COALESCE(SUM(CASE WHEN known_status = 'delivered' THEN 1 ELSE 0 END), 0) AS validOrderCount,
       COALESCE(SUM(CASE WHEN order_status = 'canceled' THEN 1.0 ELSE 0 END) / NULLIF(SUM(CASE WHEN order_status != 'unavailable' THEN 1 ELSE 0 END), 0), 0) AS cancellationRate,
-      COALESCE(SUM(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow AND delivered_at <= estimated_delivery_at THEN 1.0 ELSE 0 END) / NULLIF(SUM(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow THEN 1 ELSE 0 END), 0), 0) AS onTimeDeliveryRate,
-      COALESCE(AVG(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow THEN julianday(delivered_at) - julianday(purchase_at) END), 0) AS averageDeliveryDays,
+      COALESCE(SUM(CASE WHEN known_status = 'delivered' AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow AND delivered_at <= estimated_delivery_at THEN 1.0 ELSE 0 END) / NULLIF(SUM(CASE WHEN known_status = 'delivered' AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow THEN 1 ELSE 0 END), 0), 0) AS onTimeDeliveryRate,
+      COALESCE(AVG(CASE WHEN known_status = 'delivered' THEN julianday(delivered_at) - julianday(purchase_at) END), 0) AS averageDeliveryDays,
       COALESCE((SELECT AVG(reviews.review_score) FROM reviews JOIN selected_orders ON selected_orders.order_id = reviews.order_id WHERE reviews.review_creation_at <= :replayNow), 0) AS averageReviewScore,
       COALESCE(SUM(selected_payment_amount), 0) AS paymentAmount,
       COUNT(DISTINCT customer_unique_id) AS uniqueBuyerCount,
@@ -167,7 +175,7 @@ function contributionRows(database: DatabaseSync, queryParameters: QueryParamete
     JOIN order_items ON order_items.order_id = selected_orders.order_id
     JOIN products ON products.product_id = order_items.product_id
     LEFT JOIN category_translations ON category_translations.category_name = products.category_name
-    WHERE selected_orders.order_status = 'delivered'
+    WHERE selected_orders.known_status = 'delivered'
       AND (:category IS NULL OR products.category_name = :category)
       AND (:sellerId IS NULL OR order_items.seller_id = :sellerId)
       AND products.category_name IS NOT NULL
@@ -179,7 +187,7 @@ function contributionRows(database: DatabaseSync, queryParameters: QueryParamete
     FROM selected_orders
     JOIN order_items ON order_items.order_id = selected_orders.order_id
     JOIN products ON products.product_id = order_items.product_id
-    WHERE selected_orders.order_status = 'delivered'
+    WHERE selected_orders.known_status = 'delivered'
       AND (:category IS NULL OR products.category_name = :category)
       AND (:sellerId IS NULL OR order_items.seller_id = :sellerId)
     GROUP BY order_items.seller_id
@@ -188,7 +196,7 @@ function contributionRows(database: DatabaseSync, queryParameters: QueryParamete
   const customerStates = database.prepare(`${filteredOrdersCte}
     SELECT customer_state AS customerState, SUM(item_gmv) AS itemGmv, COUNT(*) AS validOrderCount
     FROM selected_orders
-    WHERE order_status = 'delivered'
+    WHERE known_status = 'delivered'
     GROUP BY customer_state
     ORDER BY itemGmv DESC, customerState ASC
   `).all(queryParameters) as Contributions['customerStates'];
@@ -219,17 +227,17 @@ export function createPilotRepository(database: DatabaseSync): PilotRepository {
       const comparisonValidOrderCount = toNumber(previous.validOrderCount);
 
       const dailyTrend = database.prepare(`${filteredOrdersCte}
-        SELECT date(purchase_at) AS date, COALESCE(SUM(CASE WHEN order_status = 'delivered' THEN item_gmv ELSE 0 END), 0) AS itemGmv,
-          COALESCE(SUM(CASE WHEN order_status = 'delivered' THEN 1 ELSE 0 END), 0) AS validOrderCount
+        SELECT date(purchase_at) AS date, COALESCE(SUM(CASE WHEN known_status = 'delivered' THEN item_gmv ELSE 0 END), 0) AS itemGmv,
+          COALESCE(SUM(CASE WHEN known_status = 'delivered' THEN 1 ELSE 0 END), 0) AS validOrderCount
         FROM selected_orders GROUP BY date(purchase_at) ORDER BY date ASC
       `).all(currentParameters) as PilotSnapshot['dailyTrend'];
       const funnel = database.prepare(`${filteredOrdersCte}
-        SELECT COUNT(*) AS purchased, SUM(CASE WHEN approved_at IS NOT NULL THEN 1 ELSE 0 END) AS approved,
-          SUM(CASE WHEN carrier_at IS NOT NULL THEN 1 ELSE 0 END) AS carrier, SUM(CASE WHEN delivered_at IS NOT NULL THEN 1 ELSE 0 END) AS delivered
+        SELECT COUNT(*) AS purchased, SUM(CASE WHEN approved_at IS NOT NULL AND approved_at <= :replayNow THEN 1 ELSE 0 END) AS approved,
+          SUM(CASE WHEN carrier_at IS NOT NULL AND carrier_at <= :replayNow THEN 1 ELSE 0 END) AS carrier, SUM(CASE WHEN known_status = 'delivered' THEN 1 ELSE 0 END) AS delivered
         FROM selected_orders
       `).get(currentParameters) as { purchased: number; approved: number | null; carrier: number | null; delivered: number | null };
       const recentOrders = database.prepare(`${filteredOrdersCte}
-        SELECT order_id AS orderId, purchase_at AS purchasedAt, order_status AS status, item_gmv AS itemGmv, item_count AS itemCount, customer_state AS customerState
+        SELECT order_id AS orderId, purchase_at AS purchasedAt, known_status AS status, item_gmv AS itemGmv, item_count AS itemCount, customer_state AS customerState
         FROM selected_orders ORDER BY purchase_at DESC, order_id DESC LIMIT 20
       `).all(currentParameters) as PilotSnapshot['recentOrders'];
       const payments = {
@@ -246,16 +254,16 @@ export function createPilotRepository(database: DatabaseSync): PilotRepository {
       };
       const fulfillmentRow = database.prepare(`${filteredOrdersCte}
         SELECT
-          COALESCE(AVG(CASE WHEN order_status = 'delivered' AND approved_at IS NOT NULL AND approved_at <= :replayNow THEN julianday(approved_at) - julianday(purchase_at) END), 0) AS averageApprovalDays,
-          COALESCE(AVG(CASE WHEN order_status = 'delivered' AND carrier_at IS NOT NULL AND carrier_at <= :replayNow THEN julianday(carrier_at) - julianday(purchase_at) END), 0) AS averageCarrierDays,
-          COALESCE(AVG(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow THEN julianday(delivered_at) - julianday(purchase_at) END), 0) AS averageDeliveryDays,
-          COALESCE(SUM(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow AND delivered_at > estimated_delivery_at THEN 1.0 ELSE 0 END) / NULLIF(SUM(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow THEN 1 ELSE 0 END), 0), 0) AS lateDeliveryRate,
-          COALESCE(AVG(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow AND delivered_at > estimated_delivery_at THEN julianday(delivered_at) - julianday(estimated_delivery_at) END), 0) AS averageLateDays
+          COALESCE(AVG(CASE WHEN known_status IN ('approved', 'carrier', 'delivered') THEN julianday(approved_at) - julianday(purchase_at) END), 0) AS averageApprovalDays,
+          COALESCE(AVG(CASE WHEN known_status IN ('carrier', 'delivered') THEN julianday(carrier_at) - julianday(purchase_at) END), 0) AS averageCarrierDays,
+          COALESCE(AVG(CASE WHEN known_status = 'delivered' THEN julianday(delivered_at) - julianday(purchase_at) END), 0) AS averageDeliveryDays,
+          COALESCE(SUM(CASE WHEN known_status = 'delivered' AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow AND delivered_at > estimated_delivery_at THEN 1.0 ELSE 0 END) / NULLIF(SUM(CASE WHEN known_status = 'delivered' AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow THEN 1 ELSE 0 END), 0), 0) AS lateDeliveryRate,
+          COALESCE(AVG(CASE WHEN known_status = 'delivered' AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow AND delivered_at > estimated_delivery_at THEN julianday(delivered_at) - julianday(estimated_delivery_at) END), 0) AS averageLateDays
         FROM selected_orders
       `).get(currentParameters) as unknown as FulfillmentMetrics;
       const fulfillment = {
         statusDistribution: database.prepare(`${filteredOrdersCte}
-          SELECT order_status AS status, COUNT(*) AS value FROM selected_orders GROUP BY order_status ORDER BY status ASC
+          SELECT known_status AS status, COUNT(*) AS value FROM selected_orders GROUP BY known_status ORDER BY status ASC
         `).all(currentParameters) as NonNullable<PilotSnapshot['fulfillment']>['statusDistribution'],
         ...fulfillmentRow,
       };
@@ -265,7 +273,7 @@ export function createPilotRepository(database: DatabaseSync): PilotRepository {
           WHERE reviews.review_creation_at <= :replayNow GROUP BY reviews.review_score ORDER BY score ASC
         `).all(currentParameters) as NonNullable<PilotSnapshot['experience']>['scoreDistribution'],
         ...(database.prepare(`${filteredOrdersCte}
-          SELECT COALESCE(SUM(CASE WHEN reviews.review_score IN (1, 2) THEN 1.0 ELSE 0 END) / NULLIF(COUNT(*), 0), 0) AS lowScoreRate,
+          SELECT COALESCE(COUNT(DISTINCT CASE WHEN reviews.review_score IN (1, 2) THEN reviews.order_id END) * 1.0 / NULLIF(COUNT(DISTINCT reviews.order_id), 0), 0) AS lowScoreRate,
             COALESCE(AVG(CASE WHEN reviews.review_answer_at IS NOT NULL AND reviews.review_answer_at <= :replayNow THEN julianday(reviews.review_answer_at) - julianday(reviews.review_creation_at) END), 0) AS averageReplyDays
           FROM reviews JOIN selected_orders ON selected_orders.order_id = reviews.order_id WHERE reviews.review_creation_at <= :replayNow
         `).get(currentParameters) as unknown as ExperienceMetrics),

@@ -90,16 +90,16 @@ export type PilotSnapshot = {
   customerStateRanking: Array<{ customerState: string; itemGmv: number }>;
   recentOrders: Array<{ orderId: string; purchasedAt: string; status: string; itemGmv: number; itemCount: number; customerState: string }>;
   capabilities: PilotCapability[];
-  commerce?: {
+  commerce: {
     paymentAmount: PilotKpi;
     uniqueBuyerCount: PilotKpi;
     repeatBuyerCount: PilotKpi;
   };
-  payments?: {
+  payments: {
     byType: Array<{ paymentType: string; paymentAmount: number }>;
     installments: Array<{ installments: number; paymentAmount: number }>;
   };
-  fulfillment?: {
+  fulfillment: {
     statusDistribution: Array<{ status: string; value: number }>;
     averageApprovalDays: number;
     averageCarrierDays: number;
@@ -107,12 +107,12 @@ export type PilotSnapshot = {
     lateDeliveryRate: number;
     averageLateDays: number;
   };
-  experience?: {
+  experience: {
     scoreDistribution: Array<{ score: number; value: number }>;
     lowScoreRate: number;
     averageReplyDays: number;
   };
-  contributions?: {
+  contributions: {
     categories: Array<{ category: string; label: string; itemGmv: number; itemCount: number }>;
     sellers: Array<{ sellerId: string; itemGmv: number; validOrderCount: number }>;
     customerStates: Array<{ customerState: string; itemGmv: number; validOrderCount: number }>;
