@@ -35,6 +35,7 @@ const status = z.union([
   z.object({ ready: z.literal(true), range: z.object({ start: date, end: date }).strict(), replay }).strict(),
 ]);
 const filterOptions = z.object({ categories: z.array(z.string()), sellerIds: z.array(z.string()), customerStates: z.array(z.string()) }).strict();
+const analysisUnit = z.enum(['currency', 'count', 'ratio', 'days', 'score']);
 const snapshot = z.object({
   filters,
   sourceLocalNow: localDateTime,
@@ -67,8 +68,8 @@ const snapshot = z.object({
   }).strict(),
 }).strict();
 const analysis = z.object({
-  summary: z.string(), signals: z.array(z.object({ label: z.string(), value: z.number().finite(), direction: z.enum(['up', 'down', 'flat']) }).strict()),
-  causes: z.array(z.object({ label: z.string(), contribution: z.number().finite(), evidence: z.string() }).strict()), risks: z.array(z.object({ severity: z.enum(['critical', 'warning']), title: z.string(), evidence: z.string() }).strict()),
+  summary: z.string(), signals: z.array(z.object({ factId: z.string(), label: z.string(), unit: analysisUnit, value: z.number().finite(), direction: z.enum(['up', 'down', 'flat']) }).strict()),
+  causes: z.array(z.object({ factId: z.string(), label: z.string(), unit: analysisUnit, contribution: z.number().finite(), evidence: z.string() }).strict()), risks: z.array(z.object({ severity: z.enum(['critical', 'warning']), title: z.string(), evidence: z.string() }).strict()),
   actions: z.array(z.object({ priority: z.enum(['high', 'medium', 'low']), title: z.string(), rationale: z.string(), ownerRole: z.string(), expectedImpact: z.string(), validationMetric: z.string() }).strict()),
   followUps: z.array(z.string()), source: z.enum(['deepseek', 'local']), generatedAt: isoInstant, fallbackReason: z.enum(['not_configured', 'upstream_error', 'timeout', 'invalid_response', 'network_error']).optional(), metadata: z.object({ sourceLocalNow: localDateTime }).strict(),
 }).strict();

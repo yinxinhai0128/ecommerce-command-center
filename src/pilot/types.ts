@@ -56,8 +56,8 @@ export type PilotSnapshot = {
 
 export type PilotAnalysis = {
   summary: string;
-  signals: Array<{ label: string; value: number; direction: 'up' | 'down' | 'flat' }>;
-  causes: Array<{ label: string; contribution: number; evidence: string }>;
+  signals: Array<{ factId: string; label: string; unit: 'currency' | 'count' | 'ratio' | 'days' | 'score'; value: number; direction: 'up' | 'down' | 'flat' }>;
+  causes: Array<{ factId: string; label: string; unit: 'currency' | 'count' | 'ratio' | 'days' | 'score'; contribution: number; evidence: string }>;
   risks: Array<{ severity: 'critical' | 'warning'; title: string; evidence: string }>;
   actions: Array<{ priority: 'high' | 'medium' | 'low'; title: string; rationale: string; ownerRole: string; expectedImpact: string; validationMetric: string }>;
   followUps: string[];

@@ -126,6 +126,11 @@ export type PilotReplayState = {
 
 export type PilotAnalysisUnit = 'currency' | 'count' | 'ratio' | 'days' | 'score';
 
+export type PilotAnalysisResult = Omit<AnalysisResult, 'signals' | 'causes'> & {
+  signals: Array<AnalysisResult['signals'][number] & { factId: string; unit: PilotAnalysisUnit }>;
+  causes: Array<AnalysisResult['causes'][number] & { factId: string; unit: PilotAnalysisUnit }>;
+};
+
 export type PilotAnalysisContext = {
   question?: string;
   sourceLocalNow: string;
@@ -136,6 +141,6 @@ export type PilotAnalysisContext = {
   contributors: Array<{ id: string; dimension: 'category' | 'seller' | 'customerState'; label: string; itemGmv: number }>;
 };
 
-export type PilotAnalysisResponse = AnalysisResult & {
+export type PilotAnalysisResponse = PilotAnalysisResult & {
   metadata: { sourceLocalNow: string };
 };

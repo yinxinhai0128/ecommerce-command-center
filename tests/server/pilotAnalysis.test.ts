@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import request from 'supertest';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createApp } from '../../server/index';
-import { modelAnalysisSchema } from '../../server/analysis/schema';
-import { buildPilotAnalysisContext } from '../../server/pilot/analysisContext';
+import { buildPilotAnalysisContext, trustedEvidenceAllowList } from '../../server/pilot/analysisContext';
+import { pilotModelAnalysisSchema } from '../../server/pilot/analysisSchema';
 import { hasOnlyTrustedNumbers, requestPilotDeepSeekAnalysis } from '../../server/pilot/deepseekAnalysis';
 import { createPilotSchema, openPilotDatabase } from '../../server/pilot/database';
 import { analyzeLocally } from '../../server/pilot/localAnalysis';
@@ -113,8 +113,8 @@ async function readyDataDirectory() {
 function modelResult(signalValue: number) {
   return {
     summary: '基于可信证据的分析。',
-    signals: [{ label: '成交额', value: signalValue, direction: 'up' }],
-    causes: [{ label: '品类：books', contribution: 490, evidence: '图书贡献来自可信快照。' }],
+    signals: [{ factId: 'itemGmv.value', label: '成交额', unit: 'currency', value: signalValue, direction: 'up' }],
+    causes: [{ factId: 'category:1', label: '品类：books', unit: 'currency', contribution: 490, evidence: '图书贡献来自可信快照。' }],
     risks: [],
     actions: [{
       priority: 'medium',
@@ -129,6 +129,78 @@ function modelResult(signalValue: number) {
 }
 
 describe('Olist pilot trusted analysis', () => {
+  test.each([
+    ['summary 中的陌生预测数值', { summary: '预计明日销售 123456789。' }],
+    ['risk 中的禁止指标', { risks: [{ severity: 'warning', title: '毛利率风险', evidence: '毛利率为 30%。' }] }],
+    ['action 中的陌生目标数值', { actions: [{ ...modelResult(490).actions[0], expectedImpact: '目标提升到 123456789。' }] }],
+  ])('DeepSeek %s时使用 invalid_response 本地降级', async (_name, changed) => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({ ...modelResult(490), ...changed }) } }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const app = createApp({
+      pilot: {
+        dataDir: await readyDataDirectory(), fetchImpl, env: { DEEPSEEK_API_KEY: 'server-key' },
+        now: () => new Date('2026-08-09T00:00:00.000Z'),
+      },
+    });
+    applications.push(app);
+
+    const response = await request(app).post('/api/pilot/analysis').send({ question: '表现如何？', filters });
+
+    expect(response.body).toMatchObject({ source: 'local', fallbackReason: 'invalid_response' });
+    expect(JSON.stringify(response.body)).not.toMatch(/123456789|毛利率|30%/);
+  });
+
+  test.each([
+    ['错误 factId', { factId: 'validOrderCount.value', label: '成交额', unit: 'currency', value: 490, direction: 'up' }],
+    ['错误 unit', { factId: 'itemGmv.value', label: '成交额', unit: 'count', value: 490, direction: 'up' }],
+  ])('DeepSeek 正确数值搭配%s时使用 invalid_response 本地降级', async (_name, signal) => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({ ...modelResult(490), signals: [signal] }) } }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const app = createApp({
+      pilot: {
+        dataDir: await readyDataDirectory(), fetchImpl, env: { DEEPSEEK_API_KEY: 'server-key' },
+        now: () => new Date('2026-08-09T00:00:00.000Z'),
+      },
+    });
+    applications.push(app);
+
+    const response = await request(app).post('/api/pilot/analysis').send({ question: '表现如何？', filters });
+
+    expect(response.body).toMatchObject({ source: 'local', fallbackReason: 'invalid_response' });
+  });
+
+  test.each([
+    ['boleto 支付', 'boleto支付情况如何？', 'payments.byType.boleto.paymentAmount', '支付方式：boleto 支付金额', 155],
+    ['3期支付', '3期分期支付情况如何？', 'payments.installments.3.paymentAmount', '分期：3期 支付金额', 420],
+  ])('本地支付分析优先选择问题指定的%s事实', (_name, question, factId, label, value) => {
+    const result = analyzeLocally(buildPilotAnalysisContext(snapshot), question, 'not_configured');
+
+    expect(result.signals[0]).toMatchObject({ factId, label, unit: 'currency', value });
+  });
+
+  test.each([
+    ['贡献', '哪些品类和卖家贡献最大？'],
+    ['整体', '请做一份整体诊断'],
+    ['成交', '成交额和订单表现如何？'],
+  ])('本地%s分析的 signals/causes 全部精确绑定 context 且不虚构因果', (_name, question) => {
+    const context = buildPilotAnalysisContext(snapshot);
+    const result = analyzeLocally(context, question, 'not_configured');
+    const allowed = trustedEvidenceAllowList(context);
+
+    for (const signal of result.signals) {
+      expect(allowed.signals).toContainEqual(expect.objectContaining({
+        id: signal.factId, label: signal.label, unit: signal.unit, value: signal.value,
+      }));
+    }
+    for (const cause of result.causes) {
+      expect(allowed.causes).toContainEqual(expect.objectContaining({
+        id: cause.factId, label: cause.label, unit: cause.unit, value: cause.contribution,
+      }));
+    }
+    expect(JSON.stringify(result)).not.toMatch(/原因|导致|造成/);
+  });
   test('strict 请求边界拒绝浏览器 KPI 注入', async () => {
     const fetchImpl = vi.fn();
     const app = createApp({
@@ -249,8 +321,8 @@ describe('Olist pilot trusted analysis', () => {
     ['reviews', '用户评价是否变差？', '平均评分'],
     ['reviews synonym', '最近差评是否变多？', '平均评分'],
     ['delivery synonym', '履约环节是否存在问题？', '准时送达率'],
-    ['contributors', '哪些品类和卖家贡献最大？', '主要贡献'],
-    ['general', '请做一份整体诊断', '经营概览'],
+    ['contributors', '哪些品类和卖家贡献最大？', '品类：books'],
+    ['general', '请做一份整体诊断', '成交额'],
   ])('本地分析区分 %s 问题', (_kind, question, expectedLabel) => {
     const result = analyzeLocally(buildPilotAnalysisContext(snapshot), question, 'not_configured', () => new Date('2026-08-09T00:00:00.000Z'));
 
@@ -311,26 +383,28 @@ describe('Olist pilot trusted analysis', () => {
       ...snapshot,
       kpis: { ...snapshot.kpis, averageOrderValue: { ...snapshot.kpis.averageOrderValue, value: 10 } },
     });
-    const analysis = (label: string, value: number) => ({
-      signals: [{ label, value, direction: 'up' as const }],
+    const analysis = (factId: string, label: string, unit: 'currency' | 'count' | 'ratio', value: number) => ({
+      signals: [{ factId, label, unit, value, direction: 'up' as const }],
       causes: [],
     });
 
-    expect(hasOnlyTrustedNumbers(analysis('取消率', 490), buildPilotAnalysisContext(snapshot))).toBe(false);
-    expect(hasOnlyTrustedNumbers(analysis('有效订单数', 10.009), countBorrowingCurrency)).toBe(false);
-    expect(hasOnlyTrustedNumbers(analysis('取消率', 0.10009), buildPilotAnalysisContext(snapshot))).toBe(true);
+    expect(hasOnlyTrustedNumbers(analysis('cancellationRate.value', '取消率', 'ratio', 490), buildPilotAnalysisContext(snapshot))).toBe(false);
+    expect(hasOnlyTrustedNumbers(analysis('validOrderCount.value', '有效订单数', 'count', 10.009), countBorrowingCurrency)).toBe(false);
+    expect(hasOnlyTrustedNumbers(analysis('cancellationRate.value', '取消率', 'ratio', 0.10009), buildPilotAnalysisContext(snapshot))).toBe(false);
+    expect(hasOnlyTrustedNumbers(analysis('cancellationRate.value', '取消率', 'ratio', 0.1), buildPilotAnalysisContext(snapshot))).toBe(true);
   });
 
   test('cause 必须按同一贡献者标签校验贡献金额', () => {
     const context = buildPilotAnalysisContext(snapshot);
     const analysis = (contribution: number) => ({
-      signals: [{ label: '成交额', value: 490, direction: 'up' as const }],
-      causes: [{ label: '品类：books', contribution, evidence: '可信证据' }],
+      signals: [{ factId: 'itemGmv.value', label: '成交额', unit: 'currency' as const, value: 490, direction: 'up' as const }],
+      causes: [{ factId: 'category:1', label: '品类：books', unit: 'currency' as const, contribution, evidence: '可信证据' }],
     });
 
     expect(hasOnlyTrustedNumbers(analysis(0.1), context)).toBe(false);
     expect(hasOnlyTrustedNumbers(analysis(490), context)).toBe(false);
-    expect(hasOnlyTrustedNumbers(analysis(300.009), context)).toBe(true);
+    expect(hasOnlyTrustedNumbers(analysis(300.009), context)).toBe(false);
+    expect(hasOnlyTrustedNumbers(analysis(300), context)).toBe(true);
   });
 
   test('合法零值、负变化率和重复 signal 通过证据绑定', () => {
@@ -342,20 +416,20 @@ describe('Olist pilot trusted analysis', () => {
     const model = {
       ...modelResult(0),
       signals: [
-        { label: '成交额', value: 0, direction: 'flat' },
-        { label: '成交额变化率', value: -0.02, direction: 'down' },
-        { label: '成交额', value: 0, direction: 'flat' },
+        { factId: 'itemGmv.value', label: '成交额', unit: 'currency', value: 0, direction: 'flat' },
+        { factId: 'itemGmv.changeRate', label: '成交额变化率', unit: 'ratio', value: -0.02, direction: 'down' },
+        { factId: 'itemGmv.value', label: '成交额', unit: 'currency', value: 0, direction: 'flat' },
       ],
       causes: [],
     };
-    const parsed = modelAnalysisSchema.safeParse(model);
+    const parsed = pilotModelAnalysisSchema.safeParse(model);
 
     expect(parsed.success).toBe(true);
     expect(parsed.success && hasOnlyTrustedNumbers(parsed.data, zeroContext)).toBe(true);
   });
 
   test.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])('analysis schema 拒绝非有限结构数值 %s', (value) => {
-    expect(modelAnalysisSchema.safeParse({ ...modelResult(490), signals: [{ label: '成交额', value, direction: 'up' }] }).success).toBe(false);
+    expect(pilotModelAnalysisSchema.safeParse({ ...modelResult(490), signals: [{ factId: 'itemGmv.value', label: '成交额', unit: 'currency', value, direction: 'up' }] }).success).toBe(false);
   });
 
   test('12 秒硬截止覆盖响应 body 读取阶段', async () => {
@@ -412,14 +486,16 @@ describe('Olist pilot trusted analysis', () => {
     expect(result.summary).toContain('品类：books');
     expect(result.summary).toContain('卖家：seller-1');
     expect(result.summary).not.toContain('地区：SP');
-    expect(result.causes.map(({ label }) => label)).toEqual(['品类：books', '卖家：seller-1']);
+    expect(result.signals.map(({ label }) => label)).toEqual(['品类：books', '卖家：seller-1']);
+    expect(result.causes).toEqual([]);
   });
 
   test('地区贡献问题只返回地区维度', () => {
     const result = analyzeLocally(buildPilotAnalysisContext(snapshot), '哪些地区贡献最大？', 'not_configured');
 
     expect(result.summary).toContain('地区：SP');
-    expect(result.causes.map(({ label }) => label)).toEqual(['地区：SP']);
+    expect(result.signals.map(({ label }) => label)).toEqual(['地区：SP']);
+    expect(result.causes).toEqual([]);
   });
 
   test('三维贡献问题各取对应 top 并按成交额稳定合并', () => {
@@ -427,12 +503,12 @@ describe('Olist pilot trusted analysis', () => {
     const result = analyzeLocally(context, '哪些品类、卖家和地区贡献最大？', 'not_configured');
     const generic = analyzeLocally(context, '哪些贡献者贡献最大？', 'not_configured');
 
-    expect(result.causes.map(({ label, contribution }) => ({ label, contribution }))).toEqual([
-      { label: '地区：SP', contribution: 350 },
-      { label: '品类：books', contribution: 300 },
-      { label: '卖家：seller-1', contribution: 250 },
+    expect(result.signals.map(({ label, value }) => ({ label, value }))).toEqual([
+      { label: '地区：SP', value: 350 },
+      { label: '品类：books', value: 300 },
+      { label: '卖家：seller-1', value: 250 },
     ]);
-    expect(result.causes).toHaveLength(3);
+    expect(result.causes).toHaveLength(0);
     expect(result.summary).toContain('地区：SP');
     expect(result.summary).toContain('品类：books');
     expect(result.summary).toContain('卖家：seller-1');

@@ -1,8 +1,8 @@
-import type { AnalysisFallbackReason, AnalysisResult } from '../../src/domain/types';
-import { analysisResultSchema, modelAnalysisSchema } from '../analysis/schema';
+import type { AnalysisFallbackReason } from '../../src/domain/types';
 import type { FetchImplementation } from '../analysis/deepseekProvider';
 import { trustedEvidenceAllowList } from './analysisContext';
-import type { PilotAnalysisContext, PilotAnalysisUnit } from './contracts';
+import { pilotAnalysisResultSchema, pilotModelAnalysisSchema, type PilotModelAnalysis } from './analysisSchema';
+import type { PilotAnalysisContext, PilotAnalysisResult } from './contracts';
 
 type DeepSeekOptions = {
   fetchImpl: FetchImplementation;
@@ -13,13 +13,13 @@ type DeepSeekOptions = {
 };
 
 export type PilotDeepSeekOutcome =
-  | { analysis: AnalysisResult }
+  | { analysis: PilotAnalysisResult }
   | { fallbackReason: Exclude<AnalysisFallbackReason, 'not_configured'> };
 
 const modelSchemaDescription = JSON.stringify({
   summary: 'string',
-  signals: [{ label: 'string', value: 'trusted finite number', direction: 'up | down | flat' }],
-  causes: [{ label: 'string', contribution: 'trusted finite number', evidence: 'string' }],
+  signals: [{ factId: 'trusted fact id', label: 'trusted fact label', unit: 'trusted fact unit', value: 'trusted finite number', direction: 'up | down | flat' }],
+  causes: [{ factId: 'trusted fact id', label: 'trusted fact label', unit: 'trusted fact unit', contribution: 'trusted finite number', evidence: 'string' }],
   risks: [{ severity: 'critical | warning', title: 'string', evidence: 'string' }],
   actions: [{
     priority: 'high | medium | low',
@@ -32,25 +32,46 @@ const modelSchemaDescription = JSON.stringify({
   followUps: ['以问号结尾的可点击问题'],
 });
 
-function tolerance(unit: PilotAnalysisUnit) {
-  if (unit === 'currency') return 0.01;
-  if (unit === 'ratio') return 0.0001;
-  return 0;
+function matchesEvidence(value: number, evidence: { value: number }) {
+  return Number.isFinite(value) && Object.is(value, evidence.value);
 }
 
-function matchesEvidence(value: number, evidence: { value: number; unit: PilotAnalysisUnit }) {
-  return Number.isFinite(value) && Math.abs(value - evidence.value) <= tolerance(evidence.unit);
-}
-
-export function hasOnlyTrustedNumbers(analysis: Pick<AnalysisResult, 'signals' | 'causes'>, context: PilotAnalysisContext) {
+export function hasOnlyTrustedNumbers(analysis: Pick<PilotAnalysisResult, 'signals' | 'causes'>, context: PilotAnalysisContext) {
   const allowList = trustedEvidenceAllowList(context);
-  return analysis.signals.every(({ label, value }) => {
-    const evidence = allowList.signals.filter((allowed) => allowed.label === label);
+  return analysis.signals.every(({ factId, label, unit, value }) => {
+    const evidence = allowList.signals.filter((allowed) => allowed.id === factId && allowed.label === label && allowed.unit === unit);
     return evidence.length === 1 && matchesEvidence(value, evidence[0]);
-  }) && analysis.causes.every(({ label, contribution }) => {
-    const evidence = allowList.causes.filter((allowed) => allowed.label === label);
+  }) && analysis.causes.every(({ factId, label, unit, contribution }) => {
+    const evidence = allowList.causes.filter((allowed) => allowed.id === factId && allowed.label === label && allowed.unit === unit);
     return evidence.length === 1 && matchesEvidence(contribution, evidence[0]);
   });
+}
+
+const prohibitedClaims = /毛利|成本|退款|退货|广告|投放|流量|目标|预测|预计|预估|\b(?:margin|cost|refund|advertis(?:e|ing|ement)?|traffic|target|forecast)\b/i;
+const numericClaim = /[-+]?\d+(?:\.\d+)?%?/g;
+
+function textFields(analysis: PilotModelAnalysis) {
+  return [
+    analysis.summary,
+    ...analysis.causes.map(({ evidence }) => evidence),
+    ...analysis.risks.flatMap(({ title, evidence }) => [title, evidence]),
+    ...analysis.actions.flatMap(({ title, rationale, ownerRole, expectedImpact, validationMetric }) => [title, rationale, ownerRole, expectedImpact, validationMetric]),
+    ...analysis.followUps,
+  ];
+}
+
+function hasOnlyTrustedTextClaims(analysis: PilotModelAnalysis, context: PilotAnalysisContext) {
+  const allowed = [...context.facts, ...context.trendChanges, ...trustedEvidenceAllowList(context).causes];
+  const allowedNumbers = allowed.flatMap(({ value, label }) => [
+    value,
+    ...(label.match(numericClaim) ?? []).map((token) => Number(token.replace('%', ''))),
+  ]);
+  return textFields(analysis).every((value) => !prohibitedClaims.test(value)
+    && (value.match(numericClaim) ?? []).every((token) => {
+      const numeric = Number(token.replace('%', ''));
+      const normalized = token.endsWith('%') ? numeric / 100 : numeric;
+      return allowedNumbers.some((allowed) => Object.is(normalized, allowed) || Object.is(numeric, allowed));
+    }));
 }
 
 export async function requestPilotDeepSeekAnalysis(options: DeepSeekOptions): Promise<PilotDeepSeekOutcome> {
@@ -106,11 +127,11 @@ export async function requestPilotDeepSeekAnalysis(options: DeepSeekOptions): Pr
       } catch {
         return { fallbackReason: 'invalid_response' };
       }
-      const modelResult = modelAnalysisSchema.safeParse(parsed);
-      if (!modelResult.success || !hasOnlyTrustedNumbers(modelResult.data, options.context)) {
+      const modelResult = pilotModelAnalysisSchema.safeParse(parsed);
+      if (!modelResult.success || !hasOnlyTrustedNumbers(modelResult.data, options.context) || !hasOnlyTrustedTextClaims(modelResult.data, options.context)) {
         return { fallbackReason: 'invalid_response' };
       }
-      const result = analysisResultSchema.safeParse({
+      const result = pilotAnalysisResultSchema.safeParse({
         ...modelResult.data,
         source: 'deepseek',
         generatedAt: options.now().toISOString(),

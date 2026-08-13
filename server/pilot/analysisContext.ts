@@ -89,8 +89,9 @@ export function buildPilotAnalysisContext(snapshot: PilotSnapshot, question?: st
 }
 
 export function trustedEvidenceAllowList(context: PilotAnalysisContext) {
+  const contributors = context.contributors.map(({ id, label, itemGmv }) => ({ id, label, value: itemGmv, unit: 'currency' as const }));
   return {
-    signals: [...context.facts, ...context.trendChanges],
-    causes: context.contributors.map(({ id, label, itemGmv }) => ({ id, label, value: itemGmv, unit: 'currency' as const })),
+    signals: [...context.facts, ...context.trendChanges, ...contributors],
+    causes: contributors,
   };
 }
