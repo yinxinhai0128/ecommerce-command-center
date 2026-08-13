@@ -114,7 +114,7 @@ test('returns order-safe payment, customer, fulfillment and experience metrics',
     installments: [{ installments: 1, paymentAmount: 392 }, { installments: 2, paymentAmount: 180 }],
   });
   expect(snapshot.fulfillment).toEqual({
-    statusDistribution: [{ status: 'canceled', value: 1 }, { status: 'delivered', value: 4 }],
+    statusDistribution: [{ status: 'delivered', value: 4 }, { status: 'purchased', value: 1 }],
     averageApprovalDays: 0,
     averageCarrierDays: 0.5,
     averageDeliveryDays: 2,
@@ -201,19 +201,47 @@ test('uses distinct reviewed orders as the low-score-rate denominator', () => {
   expect(snapshot.experience.lowScoreRate).toBe(1);
 });
 
-test('keeps canceled orders out of fulfillment durations despite known milestones', () => {
-  // Mapping a canceled order to carrier, or averaging its known milestones, must fail this test.
+test('keeps final non-delivered orders out of fulfillment durations while replaying known milestones', () => {
+  // Exposing an untimestamped final status, or averaging that order into delivered durations, must fail this test.
   const snapshot = createCommerceRepository(`
     INSERT INTO orders VALUES ('canceled-with-stages', 'buyer-c', 'canceled', '2018-01-04 10:00:00', '2018-01-05 10:00:00', '2018-01-06 10:00:00', NULL, NULL);
   `).getSnapshot({ start: '2018-01-01', end: '2018-01-31' }, '2018-01-31 23:59:59');
 
   expect(snapshot.fulfillment.statusDistribution).toEqual([
-    { status: 'canceled', value: 2 },
+    { status: 'carrier', value: 1 },
     { status: 'delivered', value: 4 },
+    { status: 'purchased', value: 1 },
   ]);
-  expect(snapshot.recentOrders.find((order) => order.orderId === 'canceled-with-stages')?.status).toBe('canceled');
+  expect(snapshot.recentOrders.find((order) => order.orderId === 'canceled-with-stages')?.status).toBe('carrier');
   expect(snapshot.fulfillment.averageApprovalDays).toBe(0);
   expect(snapshot.fulfillment.averageCarrierDays).toBe(0.5);
+});
+
+test('replays a later-canceled order only through timestamped stages without leaking its final status', () => {
+  // Returning the untimestamped final canceled status, or counting it in cancellation rate, must fail this test.
+  const database = new DatabaseSync(':memory:');
+  databases.push(database);
+  createPilotSchema(database);
+  database.exec(`
+    INSERT INTO customers VALUES ('customer', 'unique', '01000', 'sao paulo', 'SP');
+    INSERT INTO orders VALUES
+      ('later-canceled', 'customer', 'canceled', '2018-01-01 10:00:00', '2018-01-02 10:00:00', '2018-01-03 10:00:00', NULL, NULL);
+  `);
+  const repository = createPilotRepository(database);
+
+  const purchased = repository.getSnapshot({ start: '2018-01-01', end: '2018-01-01' }, '2018-01-01 12:00:00');
+  const approved = repository.getSnapshot({ start: '2018-01-01', end: '2018-01-01' }, '2018-01-02 12:00:00');
+  const carrier = repository.getSnapshot({ start: '2018-01-01', end: '2018-01-01' }, '2018-01-03 12:00:00');
+
+  expect(purchased.fulfillment.statusDistribution).toEqual([{ status: 'purchased', value: 1 }]);
+  expect(purchased.recentOrders[0]?.status).toBe('purchased');
+  expect(purchased.kpis.cancellationRate.value).toBe(0);
+  expect(approved.fulfillment.statusDistribution).toEqual([{ status: 'approved', value: 1 }]);
+  expect(approved.recentOrders[0]?.status).toBe('approved');
+  expect(approved.kpis.cancellationRate.value).toBe(0);
+  expect(carrier.fulfillment.statusDistribution).toEqual([{ status: 'carrier', value: 1 }]);
+  expect(carrier.recentOrders[0]?.status).toBe('carrier');
+  expect(carrier.kpis.cancellationRate.value).toBe(0);
 });
 
 test('calculates only metrics supported by Olist facts', () => {
@@ -223,7 +251,7 @@ test('calculates only metrics supported by Olist facts', () => {
   expect(snapshot.kpis.itemGmv.value).toBe(490);
   expect(snapshot.kpis.validOrderCount.value).toBe(4);
   expect(snapshot.kpis.averageOrderValue.value).toBe(122.5);
-  expect(snapshot.kpis.cancellationRate.value).toBe(1 / 6);
+  expect(snapshot.kpis.cancellationRate.value).toBe(0);
   expect(snapshot.kpis.onTimeDeliveryRate.value).toBe(2 / 3);
   expect(snapshot.kpis.averageDeliveryDays.value).toBe(6);
   expect(snapshot.kpis.averageReviewScore.value).toBe(4);
@@ -308,7 +336,7 @@ test('keeps unitemized orders in an unfiltered cohort', () => {
   const snapshot = repository.getSnapshot({ start: '2018-01-01', end: '2018-01-01' }, '2018-01-01 23:59:59');
   const afterDelivery = repository.getSnapshot({ start: '2018-01-01', end: '2018-01-01' }, '2018-01-02 11:00:00');
 
-  expect(snapshot.kpis.cancellationRate.value).toBe(1 / 2);
+  expect(snapshot.kpis.cancellationRate.value).toBe(0);
   expect(snapshot.fulfillmentFunnel).toEqual([
     { stage: 'purchased', value: 2 },
     { stage: 'approved', value: 0 },
@@ -436,7 +464,7 @@ test('uses matching line-item GMV without duplicating filtered orders', () => {
 
   expect(snapshot.kpis.itemGmv.value).toBe(100);
   expect(snapshot.kpis.validOrderCount.value).toBe(1);
-  expect(snapshot.kpis.cancellationRate.value).toBe(1 / 2);
+  expect(snapshot.kpis.cancellationRate.value).toBe(0);
   expect(snapshot.fulfillmentFunnel).toEqual([
     { stage: 'purchased', value: 2 },
     { stage: 'approved', value: 2 },

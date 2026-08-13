@@ -78,8 +78,7 @@ const filteredOrdersCte = `
   ),
   selected_orders AS (
     SELECT *,
-      CASE WHEN order_status != 'delivered' THEN order_status
-        WHEN delivered_at IS NOT NULL AND delivered_at <= :replayNow THEN 'delivered'
+      CASE WHEN delivered_at IS NOT NULL AND delivered_at <= :replayNow THEN 'delivered'
         WHEN carrier_at IS NOT NULL AND carrier_at <= :replayNow THEN 'carrier'
         WHEN approved_at IS NOT NULL AND approved_at <= :replayNow THEN 'approved'
         ELSE 'purchased'
@@ -155,7 +154,7 @@ function summary(database: DatabaseSync, queryParameters: QueryParameters): Summ
     SELECT
       COALESCE(SUM(CASE WHEN known_status = 'delivered' THEN item_gmv ELSE 0 END), 0) AS itemGmv,
       COALESCE(SUM(CASE WHEN known_status = 'delivered' THEN 1 ELSE 0 END), 0) AS validOrderCount,
-      COALESCE(SUM(CASE WHEN order_status = 'canceled' THEN 1.0 ELSE 0 END) / NULLIF(SUM(CASE WHEN order_status != 'unavailable' THEN 1 ELSE 0 END), 0), 0) AS cancellationRate,
+      COALESCE(SUM(CASE WHEN known_status = 'canceled' THEN 1.0 ELSE 0 END) / NULLIF(COUNT(*), 0), 0) AS cancellationRate,
       COALESCE(SUM(CASE WHEN known_status = 'delivered' AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow AND delivered_at <= estimated_delivery_at THEN 1.0 ELSE 0 END) / NULLIF(SUM(CASE WHEN known_status = 'delivered' AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow THEN 1 ELSE 0 END), 0), 0) AS onTimeDeliveryRate,
       COALESCE(AVG(CASE WHEN known_status = 'delivered' THEN julianday(delivered_at) - julianday(purchase_at) END), 0) AS averageDeliveryDays,
       COALESCE((SELECT AVG(reviews.review_score) FROM reviews JOIN selected_orders ON selected_orders.order_id = reviews.order_id WHERE reviews.review_creation_at <= :replayNow), 0) AS averageReviewScore,
