@@ -1,22 +1,31 @@
 import { DatabaseSync } from 'node:sqlite';
 import type { PilotCapability, PilotFilterOptions, PilotFilters, PilotKpi, PilotSnapshot } from './contracts';
+import { supportedContributionDimensions } from './metricDefinitions';
 
 type QueryParameters = {
   start: string;
   end: string;
+  replayNow: string;
   category: string | null;
   sellerId: string | null;
   customerState: string | null;
 };
 
-type MetricRow = {
+type SummaryRow = {
   itemGmv: number | null;
   validOrderCount: number | null;
   cancellationRate: number | null;
   onTimeDeliveryRate: number | null;
   averageDeliveryDays: number | null;
   averageReviewScore: number | null;
+  paymentAmount: number | null;
+  uniqueBuyerCount: number | null;
+  repeatBuyerCount: number | null;
 };
+
+type Contributions = NonNullable<PilotSnapshot['contributions']>;
+type FulfillmentMetrics = Omit<NonNullable<PilotSnapshot['fulfillment']>, 'statusDistribution'>;
+type ExperienceMetrics = Omit<NonNullable<PilotSnapshot['experience']>, 'scoreDistribution'>;
 
 export type PilotRepository = {
   getFilterOptions(): PilotFilterOptions;
@@ -25,15 +34,22 @@ export type PilotRepository = {
 
 const filteredOrdersCte = `
   WITH matching_items AS (
-    SELECT
-      order_items.order_id,
-      SUM(order_items.price) AS item_gmv,
-      COUNT(*) AS item_count
+    SELECT order_items.order_id, SUM(order_items.price) AS item_gmv, COUNT(*) AS item_count
     FROM order_items
     JOIN products ON products.product_id = order_items.product_id
     WHERE (:category IS NULL OR products.category_name = :category)
       AND (:sellerId IS NULL OR order_items.seller_id = :sellerId)
     GROUP BY order_items.order_id
+  ),
+  all_order_items AS (
+    SELECT order_id, SUM(price) AS item_gmv
+    FROM order_items
+    GROUP BY order_id
+  ),
+  order_payments AS (
+    SELECT order_id, SUM(payment_value) AS payment_amount
+    FROM payments
+    GROUP BY order_id
   ),
   filtered_orders AS (
     SELECT
@@ -44,16 +60,30 @@ const filteredOrdersCte = `
       orders.carrier_at,
       orders.delivered_at,
       orders.estimated_delivery_at,
+      customers.customer_unique_id,
       customers.state AS customer_state,
       COALESCE(matching_items.item_gmv, 0) AS item_gmv,
-      COALESCE(matching_items.item_count, 0) AS item_count
+      COALESCE(matching_items.item_count, 0) AS item_count,
+      COALESCE(all_order_items.item_gmv, 0) AS all_order_item_gmv,
+      COALESCE(order_payments.payment_amount, 0) AS payment_amount
     FROM orders
     JOIN customers ON customers.customer_id = orders.customer_id
     LEFT JOIN matching_items ON matching_items.order_id = orders.order_id
+    LEFT JOIN all_order_items ON all_order_items.order_id = orders.order_id
+    LEFT JOIN order_payments ON order_payments.order_id = orders.order_id
     WHERE orders.purchase_at >= :start
       AND orders.purchase_at <= :end
       AND (:customerState IS NULL OR customers.state = :customerState)
       AND ((:category IS NULL AND :sellerId IS NULL) OR matching_items.order_id IS NOT NULL)
+  ),
+  selected_orders AS (
+    SELECT *, CASE
+      WHEN :category IS NULL AND :sellerId IS NULL THEN payment_amount
+      WHEN all_order_item_gmv = 0 THEN 0
+      ELSE payment_amount * item_gmv / all_order_item_gmv
+    END AS selected_payment_amount
+    FROM filtered_orders
+    WHERE :replayNow IS NOT NULL
   )
 `;
 
@@ -62,16 +92,10 @@ const capabilities: PilotCapability[] = [
   { key: 'grossMarginRate', status: 'unavailable', reason: 'Olist 原始数据不包含成本或毛利事实。' },
 ];
 
-function toNumber(value: number | null | undefined) {
-  return value ?? 0;
-}
+const toNumber = (value: number | null | undefined) => value ?? 0;
 
 function asKpi(value: number, comparisonValue: number): PilotKpi {
-  return {
-    value,
-    comparisonValue,
-    changeRate: comparisonValue === 0 ? 0 : (value - comparisonValue) / comparisonValue,
-  };
+  return { value, comparisonValue, changeRate: comparisonValue === 0 ? 0 : (value - comparisonValue) / comparisonValue };
 }
 
 function formatLocal(date: Date) {
@@ -83,9 +107,7 @@ function sourceLocalTime(replayNow: Date | string) {
   return typeof replayNow === 'string' ? replayNow : formatLocal(replayNow);
 }
 
-function dateOnly(value: string) {
-  return value.slice(0, 10);
-}
+const dateOnly = (value: string) => value.slice(0, 10);
 
 function calendarDate(value: string) {
   const [year, month, day] = dateOnly(value).split('-').map(Number);
@@ -114,45 +136,63 @@ function endAtReplayTime(filters: PilotFilters, replayNow: Date | string) {
   return requestedEnd < sourceLocalNow ? requestedEnd : sourceLocalNow;
 }
 
-function parameters(filters: PilotFilters, start: string, end: string): QueryParameters {
+function parameters(filters: PilotFilters, start: string, end: string, replayNow: string): QueryParameters {
   return {
-    start: `${dateOnly(start)} 00:00:00`,
-    end,
-    category: filters.category ?? null,
-    sellerId: filters.sellerId ?? null,
-    customerState: filters.customerState ?? null,
+    start: `${dateOnly(start)} 00:00:00`, end, replayNow,
+    category: filters.category ?? null, sellerId: filters.sellerId ?? null, customerState: filters.customerState ?? null,
   };
 }
 
-function rankItemPrices(database: DatabaseSync, field: 'category' | 'sellerId', parameters: QueryParameters) {
-  const selection = field === 'category'
-    ? 'products.category_name AS key'
-    : 'order_items.seller_id AS key';
-  const rows = database.prepare(`${filteredOrdersCte}
-    SELECT ${selection}, SUM(order_items.price) AS itemGmv
-    FROM filtered_orders
-    JOIN order_items ON order_items.order_id = filtered_orders.order_id
-    JOIN products ON products.product_id = order_items.product_id
-    WHERE filtered_orders.order_status = 'delivered'
-      AND (:category IS NULL OR products.category_name = :category)
-      AND (:sellerId IS NULL OR order_items.seller_id = :sellerId)
-    GROUP BY key
-    ORDER BY itemGmv DESC, key ASC
-  `).all(parameters) as Array<{ key: string | null; itemGmv: number }>;
-  return rows.filter((row) => row.key !== null).map((row) => ({ key: row.key as string, itemGmv: row.itemGmv }));
-}
-
-function snapshotMetrics(database: DatabaseSync, parameters: QueryParameters): MetricRow {
+function summary(database: DatabaseSync, queryParameters: QueryParameters): SummaryRow {
   return database.prepare(`${filteredOrdersCte}
     SELECT
       COALESCE(SUM(CASE WHEN order_status = 'delivered' THEN item_gmv ELSE 0 END), 0) AS itemGmv,
       COALESCE(SUM(CASE WHEN order_status = 'delivered' THEN 1 ELSE 0 END), 0) AS validOrderCount,
       COALESCE(SUM(CASE WHEN order_status = 'canceled' THEN 1.0 ELSE 0 END) / NULLIF(SUM(CASE WHEN order_status != 'unavailable' THEN 1 ELSE 0 END), 0), 0) AS cancellationRate,
-      COALESCE(SUM(CASE WHEN order_status = 'delivered' AND estimated_delivery_at IS NOT NULL AND delivered_at <= estimated_delivery_at THEN 1.0 ELSE 0 END) / NULLIF(SUM(CASE WHEN order_status = 'delivered' AND estimated_delivery_at IS NOT NULL THEN 1 ELSE 0 END), 0), 0) AS onTimeDeliveryRate,
-      COALESCE(AVG(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL THEN julianday(delivered_at) - julianday(purchase_at) END), 0) AS averageDeliveryDays,
-      COALESCE((SELECT AVG(reviews.review_score) FROM reviews JOIN filtered_orders AS reviewed_orders ON reviewed_orders.order_id = reviews.order_id), 0) AS averageReviewScore
-    FROM filtered_orders
-  `).get(parameters) as MetricRow;
+      COALESCE(SUM(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow AND delivered_at <= estimated_delivery_at THEN 1.0 ELSE 0 END) / NULLIF(SUM(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow THEN 1 ELSE 0 END), 0), 0) AS onTimeDeliveryRate,
+      COALESCE(AVG(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow THEN julianday(delivered_at) - julianday(purchase_at) END), 0) AS averageDeliveryDays,
+      COALESCE((SELECT AVG(reviews.review_score) FROM reviews JOIN selected_orders ON selected_orders.order_id = reviews.order_id WHERE reviews.review_creation_at <= :replayNow), 0) AS averageReviewScore,
+      COALESCE(SUM(selected_payment_amount), 0) AS paymentAmount,
+      COUNT(DISTINCT customer_unique_id) AS uniqueBuyerCount,
+      COALESCE((SELECT COUNT(*) FROM (SELECT customer_unique_id FROM selected_orders WHERE purchase_at <= :replayNow GROUP BY customer_unique_id HAVING COUNT(*) >= 2)), 0) AS repeatBuyerCount
+    FROM selected_orders
+  `).get(queryParameters) as SummaryRow;
+}
+
+function contributionRows(database: DatabaseSync, queryParameters: QueryParameters): Contributions {
+  const categories = database.prepare(`${filteredOrdersCte}
+    SELECT products.category_name AS category, COALESCE(category_translations.category_name_english, products.category_name) AS label,
+      SUM(order_items.price) AS itemGmv, COUNT(*) AS itemCount
+    FROM selected_orders
+    JOIN order_items ON order_items.order_id = selected_orders.order_id
+    JOIN products ON products.product_id = order_items.product_id
+    LEFT JOIN category_translations ON category_translations.category_name = products.category_name
+    WHERE selected_orders.order_status = 'delivered'
+      AND (:category IS NULL OR products.category_name = :category)
+      AND (:sellerId IS NULL OR order_items.seller_id = :sellerId)
+      AND products.category_name IS NOT NULL
+    GROUP BY products.category_name, label
+    ORDER BY itemGmv DESC, category ASC
+  `).all(queryParameters) as Contributions['categories'];
+  const sellers = database.prepare(`${filteredOrdersCte}
+    SELECT order_items.seller_id AS sellerId, SUM(order_items.price) AS itemGmv, COUNT(DISTINCT selected_orders.order_id) AS validOrderCount
+    FROM selected_orders
+    JOIN order_items ON order_items.order_id = selected_orders.order_id
+    JOIN products ON products.product_id = order_items.product_id
+    WHERE selected_orders.order_status = 'delivered'
+      AND (:category IS NULL OR products.category_name = :category)
+      AND (:sellerId IS NULL OR order_items.seller_id = :sellerId)
+    GROUP BY order_items.seller_id
+    ORDER BY itemGmv DESC, sellerId ASC
+  `).all(queryParameters) as Contributions['sellers'];
+  const customerStates = database.prepare(`${filteredOrdersCte}
+    SELECT customer_state AS customerState, SUM(item_gmv) AS itemGmv, COUNT(*) AS validOrderCount
+    FROM selected_orders
+    WHERE order_status = 'delivered'
+    GROUP BY customer_state
+    ORDER BY itemGmv DESC, customerState ASC
+  `).all(queryParameters) as Contributions['customerStates'];
+  return { categories, sellers, customerStates };
 }
 
 export function createPilotRepository(database: DatabaseSync): PilotRepository {
@@ -168,63 +208,73 @@ export function createPilotRepository(database: DatabaseSync): PilotRepository {
     getSnapshot(filters, replayNow) {
       const sourceLocalNow = sourceLocalTime(replayNow);
       const effectiveEnd = endAtReplayTime(filters, replayNow);
-      const currentParameters = parameters(filters, filters.start, effectiveEnd);
+      const currentParameters = parameters(filters, filters.start, effectiveEnd, sourceLocalNow);
       const comparison = comparisonRange(filters.start, dateOnly(effectiveEnd));
-      const comparisonParameters = parameters(filters, comparison.start, `${comparison.end} 23:59:59`);
-      const current = snapshotMetrics(database, currentParameters);
-      const previous = snapshotMetrics(database, comparisonParameters);
+      const comparisonParameters = parameters(filters, comparison.start, `${comparison.end} 23:59:59`, sourceLocalNow);
+      const current = summary(database, currentParameters);
+      const previous = summary(database, comparisonParameters);
       const itemGmv = toNumber(current.itemGmv);
       const validOrderCount = toNumber(current.validOrderCount);
       const comparisonItemGmv = toNumber(previous.itemGmv);
       const comparisonValidOrderCount = toNumber(previous.validOrderCount);
 
       const dailyTrend = database.prepare(`${filteredOrdersCte}
-        SELECT
-          date(purchase_at) AS date,
-          COALESCE(SUM(CASE WHEN order_status = 'delivered' THEN item_gmv ELSE 0 END), 0) AS itemGmv,
+        SELECT date(purchase_at) AS date, COALESCE(SUM(CASE WHEN order_status = 'delivered' THEN item_gmv ELSE 0 END), 0) AS itemGmv,
           COALESCE(SUM(CASE WHEN order_status = 'delivered' THEN 1 ELSE 0 END), 0) AS validOrderCount
-        FROM filtered_orders
-        GROUP BY date(purchase_at)
-        ORDER BY date ASC
+        FROM selected_orders GROUP BY date(purchase_at) ORDER BY date ASC
       `).all(currentParameters) as PilotSnapshot['dailyTrend'];
-
       const funnel = database.prepare(`${filteredOrdersCte}
-        SELECT
-          COUNT(*) AS purchased,
-          SUM(CASE WHEN approved_at IS NOT NULL THEN 1 ELSE 0 END) AS approved,
-          SUM(CASE WHEN carrier_at IS NOT NULL THEN 1 ELSE 0 END) AS carrier,
-          SUM(CASE WHEN delivered_at IS NOT NULL THEN 1 ELSE 0 END) AS delivered
-        FROM filtered_orders
+        SELECT COUNT(*) AS purchased, SUM(CASE WHEN approved_at IS NOT NULL THEN 1 ELSE 0 END) AS approved,
+          SUM(CASE WHEN carrier_at IS NOT NULL THEN 1 ELSE 0 END) AS carrier, SUM(CASE WHEN delivered_at IS NOT NULL THEN 1 ELSE 0 END) AS delivered
+        FROM selected_orders
       `).get(currentParameters) as { purchased: number; approved: number | null; carrier: number | null; delivered: number | null };
-
-      const customerStateRanking = database.prepare(`${filteredOrdersCte}
-        SELECT customer_state AS customerState, SUM(item_gmv) AS itemGmv
-        FROM filtered_orders
-        WHERE order_status = 'delivered'
-        GROUP BY customer_state
-        ORDER BY itemGmv DESC, customerState ASC
-      `).all(currentParameters) as PilotSnapshot['customerStateRanking'];
-
       const recentOrders = database.prepare(`${filteredOrdersCte}
-        SELECT
-          order_id AS orderId,
-          purchase_at AS purchasedAt,
-          order_status AS status,
-          item_gmv AS itemGmv,
-          item_count AS itemCount,
-          customer_state AS customerState
-        FROM filtered_orders
-        ORDER BY purchase_at DESC, order_id DESC
-        LIMIT 20
+        SELECT order_id AS orderId, purchase_at AS purchasedAt, order_status AS status, item_gmv AS itemGmv, item_count AS itemCount, customer_state AS customerState
+        FROM selected_orders ORDER BY purchase_at DESC, order_id DESC LIMIT 20
       `).all(currentParameters) as PilotSnapshot['recentOrders'];
-
-      const categoryRanking = rankItemPrices(database, 'category', currentParameters).map((row) => ({ category: row.key, itemGmv: row.itemGmv }));
-      const sellerRanking = rankItemPrices(database, 'sellerId', currentParameters).map((row) => ({ sellerId: row.key, itemGmv: row.itemGmv }));
+      const payments = {
+        byType: database.prepare(`${filteredOrdersCte}
+          SELECT payments.payment_type AS paymentType, COALESCE(SUM(payments.payment_value * CASE WHEN :category IS NULL AND :sellerId IS NULL THEN 1 WHEN selected_orders.all_order_item_gmv = 0 THEN 0 ELSE selected_orders.item_gmv / selected_orders.all_order_item_gmv END), 0) AS paymentAmount
+          FROM selected_orders JOIN payments ON payments.order_id = selected_orders.order_id
+          GROUP BY payments.payment_type ORDER BY paymentAmount DESC, paymentType ASC
+        `).all(currentParameters) as NonNullable<PilotSnapshot['payments']>['byType'],
+        installments: database.prepare(`${filteredOrdersCte}
+          SELECT payments.payment_installments AS installments, COALESCE(SUM(payments.payment_value * CASE WHEN :category IS NULL AND :sellerId IS NULL THEN 1 WHEN selected_orders.all_order_item_gmv = 0 THEN 0 ELSE selected_orders.item_gmv / selected_orders.all_order_item_gmv END), 0) AS paymentAmount
+          FROM selected_orders JOIN payments ON payments.order_id = selected_orders.order_id
+          GROUP BY payments.payment_installments ORDER BY installments ASC
+        `).all(currentParameters) as NonNullable<PilotSnapshot['payments']>['installments'],
+      };
+      const fulfillmentRow = database.prepare(`${filteredOrdersCte}
+        SELECT
+          COALESCE(AVG(CASE WHEN order_status = 'delivered' AND approved_at IS NOT NULL AND approved_at <= :replayNow THEN julianday(approved_at) - julianday(purchase_at) END), 0) AS averageApprovalDays,
+          COALESCE(AVG(CASE WHEN order_status = 'delivered' AND carrier_at IS NOT NULL AND carrier_at <= :replayNow THEN julianday(carrier_at) - julianday(purchase_at) END), 0) AS averageCarrierDays,
+          COALESCE(AVG(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow THEN julianday(delivered_at) - julianday(purchase_at) END), 0) AS averageDeliveryDays,
+          COALESCE(SUM(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow AND delivered_at > estimated_delivery_at THEN 1.0 ELSE 0 END) / NULLIF(SUM(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow THEN 1 ELSE 0 END), 0), 0) AS lateDeliveryRate,
+          COALESCE(AVG(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow AND estimated_delivery_at IS NOT NULL AND estimated_delivery_at <= :replayNow AND delivered_at > estimated_delivery_at THEN julianday(delivered_at) - julianday(estimated_delivery_at) END), 0) AS averageLateDays
+        FROM selected_orders
+      `).get(currentParameters) as unknown as FulfillmentMetrics;
+      const fulfillment = {
+        statusDistribution: database.prepare(`${filteredOrdersCte}
+          SELECT order_status AS status, COUNT(*) AS value FROM selected_orders GROUP BY order_status ORDER BY status ASC
+        `).all(currentParameters) as NonNullable<PilotSnapshot['fulfillment']>['statusDistribution'],
+        ...fulfillmentRow,
+      };
+      const experience = {
+        scoreDistribution: database.prepare(`${filteredOrdersCte}
+          SELECT reviews.review_score AS score, COUNT(*) AS value FROM reviews JOIN selected_orders ON selected_orders.order_id = reviews.order_id
+          WHERE reviews.review_creation_at <= :replayNow GROUP BY reviews.review_score ORDER BY score ASC
+        `).all(currentParameters) as NonNullable<PilotSnapshot['experience']>['scoreDistribution'],
+        ...(database.prepare(`${filteredOrdersCte}
+          SELECT COALESCE(SUM(CASE WHEN reviews.review_score IN (1, 2) THEN 1.0 ELSE 0 END) / NULLIF(COUNT(*), 0), 0) AS lowScoreRate,
+            COALESCE(AVG(CASE WHEN reviews.review_answer_at IS NOT NULL AND reviews.review_answer_at <= :replayNow THEN julianday(reviews.review_answer_at) - julianday(reviews.review_creation_at) END), 0) AS averageReplyDays
+          FROM reviews JOIN selected_orders ON selected_orders.order_id = reviews.order_id WHERE reviews.review_creation_at <= :replayNow
+        `).get(currentParameters) as unknown as ExperienceMetrics),
+      };
+      const contributions = contributionRows(database, currentParameters);
+      void supportedContributionDimensions;
 
       return {
-        filters,
-        sourceLocalNow,
-        comparisonLabel: `${comparison.start} to ${comparison.end}`,
+        filters, sourceLocalNow, comparisonLabel: `${comparison.start} to ${comparison.end}`,
         kpis: {
           itemGmv: asKpi(itemGmv, comparisonItemGmv),
           validOrderCount: asKpi(validOrderCount, comparisonValidOrderCount),
@@ -236,16 +286,19 @@ export function createPilotRepository(database: DatabaseSync): PilotRepository {
         },
         dailyTrend,
         fulfillmentFunnel: [
-          { stage: 'purchased', value: toNumber(funnel.purchased) },
-          { stage: 'approved', value: toNumber(funnel.approved) },
-          { stage: 'carrier', value: toNumber(funnel.carrier) },
-          { stage: 'delivered', value: toNumber(funnel.delivered) },
+          { stage: 'purchased', value: toNumber(funnel.purchased) }, { stage: 'approved', value: toNumber(funnel.approved) },
+          { stage: 'carrier', value: toNumber(funnel.carrier) }, { stage: 'delivered', value: toNumber(funnel.delivered) },
         ],
-        categoryRanking,
-        sellerRanking,
-        customerStateRanking,
-        recentOrders,
-        capabilities,
+        categoryRanking: contributions.categories.map(({ category, itemGmv: rankingItemGmv }) => ({ category, itemGmv: rankingItemGmv })),
+        sellerRanking: contributions.sellers.map(({ sellerId, itemGmv: rankingItemGmv }) => ({ sellerId, itemGmv: rankingItemGmv })),
+        customerStateRanking: contributions.customerStates.map(({ customerState, itemGmv: rankingItemGmv }) => ({ customerState, itemGmv: rankingItemGmv })),
+        recentOrders, capabilities,
+        commerce: {
+          paymentAmount: asKpi(toNumber(current.paymentAmount), toNumber(previous.paymentAmount)),
+          uniqueBuyerCount: asKpi(toNumber(current.uniqueBuyerCount), toNumber(previous.uniqueBuyerCount)),
+          repeatBuyerCount: asKpi(toNumber(current.repeatBuyerCount), toNumber(previous.repeatBuyerCount)),
+        },
+        payments, fulfillment, experience, contributions,
       };
     },
   };

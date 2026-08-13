@@ -56,6 +56,113 @@ function createRepository() {
   return createPilotRepository(database);
 }
 
+function createCommerceRepository() {
+  const database = new DatabaseSync(':memory:');
+  databases.push(database);
+  createPilotSchema(database);
+  database.exec(`
+    INSERT INTO customers VALUES
+      ('buyer-a-1', 'buyer-a', '01000', 'sao paulo', 'SP'),
+      ('buyer-a-2', 'buyer-a', '01001', 'sao paulo', 'SP'),
+      ('buyer-b', 'buyer-b', '20000', 'rio de janeiro', 'RJ'),
+      ('buyer-c', 'buyer-c', '30000', 'belo horizonte', 'MG');
+    INSERT INTO sellers VALUES ('seller-1', '30000', 'belo horizonte', 'MG'), ('seller-2', '40000', 'curitiba', 'PR');
+    INSERT INTO category_translations VALUES ('books', 'Books');
+    INSERT INTO products VALUES
+      ('book', 'books', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+      ('beauty', 'beauty', NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    INSERT INTO orders VALUES
+      ('multi', 'buyer-a-1', 'delivered', '2018-01-01 10:00:00', '2018-01-01 10:00:00', '2018-01-02 10:00:00', '2018-01-04 10:00:00', '2018-01-03 10:00:00'),
+      ('repeat', 'buyer-a-2', 'delivered', '2018-01-02 10:00:00', '2018-01-02 10:00:00', '2018-01-03 10:00:00', '2018-01-05 10:00:00', '2018-01-06 10:00:00'),
+      ('voucher', 'buyer-b', 'delivered', '2018-01-03 10:00:00', '2018-01-03 10:00:00', '2018-01-03 10:00:00', '2018-01-04 10:00:00', '2018-01-05 10:00:00'),
+      ('canceled', 'buyer-c', 'canceled', '2018-01-04 10:00:00', NULL, NULL, NULL, NULL),
+      ('future', 'buyer-b', 'delivered', '2018-01-05 10:00:00', '2018-01-05 10:00:00', '2018-01-05 10:00:00', '2018-01-06 10:00:00', '2018-01-07 10:00:00');
+    INSERT INTO order_items VALUES
+      ('multi', 1, 'book', 'seller-1', '2018-01-01 10:00:00', 100, 0),
+      ('multi', 2, 'beauty', 'seller-2', '2018-01-01 10:00:00', 200, 0),
+      ('repeat', 1, 'book', 'seller-1', '2018-01-02 10:00:00', 120, 0),
+      ('voucher', 1, 'beauty', 'seller-2', '2018-01-03 10:00:00', 80, 0),
+      ('canceled', 1, 'book', 'seller-1', '2018-01-04 10:00:00', 12, 0),
+      ('future', 1, 'book', 'seller-1', '2018-01-05 10:00:00', 50, 0);
+    INSERT INTO payments VALUES
+      ('multi', 1, 'credit_card', 2, 180), ('multi', 2, 'voucher', 1, 120),
+      ('repeat', 1, 'credit_card', 1, 130), ('voucher', 1, 'voucher', 1, 70),
+      ('canceled', 1, 'voucher', 1, 12), ('future', 1, 'credit_card', 1, 60);
+    INSERT INTO reviews VALUES
+      ('review-1', 'multi', 1, NULL, NULL, '2018-01-04 12:00:00', '2018-01-05 12:00:00'),
+      ('review-2', 'repeat', 2, NULL, NULL, '2018-01-05 12:00:00', '2018-01-06 12:00:00'),
+      ('review-3', 'voucher', 3, NULL, NULL, '2018-01-04 12:00:00', '2018-01-05 12:00:00'),
+      ('review-4', 'canceled', 4, NULL, NULL, '2018-01-04 12:00:00', '2018-01-05 12:00:00'),
+      ('review-5', 'future', 5, NULL, NULL, '2018-01-06 12:00:00', '2018-01-07 12:00:00');
+  `);
+  return createPilotRepository(database);
+}
+
+test('returns order-safe payment, customer, fulfillment and experience metrics', () => {
+  // Joining payment rows to item rows before either aggregate must fail these hand-calculated totals.
+  const snapshot = createCommerceRepository().getSnapshot({ start: '2018-01-01', end: '2018-01-31' }, '2018-01-31 23:59:59');
+
+  expect(snapshot.commerce).toEqual({
+    paymentAmount: { value: 572, comparisonValue: 0, changeRate: 0 },
+    uniqueBuyerCount: { value: 3, comparisonValue: 0, changeRate: 0 },
+    repeatBuyerCount: { value: 2, comparisonValue: 0, changeRate: 0 },
+  });
+  expect(snapshot.commerce?.paymentAmount.value).not.toBe(snapshot.kpis.itemGmv.value);
+  expect(snapshot.payments).toEqual({
+    byType: [{ paymentType: 'credit_card', paymentAmount: 370 }, { paymentType: 'voucher', paymentAmount: 202 }],
+    installments: [{ installments: 1, paymentAmount: 392 }, { installments: 2, paymentAmount: 180 }],
+  });
+  expect(snapshot.fulfillment).toEqual({
+    statusDistribution: [{ status: 'canceled', value: 1 }, { status: 'delivered', value: 4 }],
+    averageApprovalDays: 0,
+    averageCarrierDays: 0.5,
+    averageDeliveryDays: 2,
+    lateDeliveryRate: 0.25,
+    averageLateDays: 1,
+  });
+  expect(snapshot.experience).toEqual({
+    scoreDistribution: [1, 2, 3, 4, 5].map((score) => ({ score, value: 1 })),
+    lowScoreRate: 0.4,
+    averageReplyDays: 1,
+  });
+});
+
+test('allocates selected item payments and applies every filter to contributions', () => {
+  // Using full-order payment after a partial item selection, or skipping a filter in a ranking, must fail this test.
+  const snapshot = createCommerceRepository().getSnapshot({ start: '2018-01-01', end: '2018-01-31', category: 'books', sellerId: 'seller-1', customerState: 'SP' }, '2018-01-31 23:59:59');
+
+  expect(snapshot.commerce?.paymentAmount.value).toBe(230);
+  expect(snapshot.payments).toEqual({
+    byType: [{ paymentType: 'credit_card', paymentAmount: 190 }, { paymentType: 'voucher', paymentAmount: 40 }],
+    installments: [{ installments: 1, paymentAmount: 170 }, { installments: 2, paymentAmount: 60 }],
+  });
+  expect(snapshot.contributions).toEqual({
+    categories: [{ category: 'books', label: 'Books', itemGmv: 220, itemCount: 2 }],
+    sellers: [{ sellerId: 'seller-1', itemGmv: 220, validOrderCount: 2 }],
+    customerStates: [{ customerState: 'SP', itemGmv: 220, validOrderCount: 2 }],
+  });
+  expect(snapshot.categoryRanking).toEqual([{ category: 'books', itemGmv: 220 }]);
+  expect(snapshot.sellerRanking).toEqual([{ sellerId: 'seller-1', itemGmv: 220 }]);
+  expect(snapshot.customerStateRanking).toEqual([{ customerState: 'SP', itemGmv: 220 }]);
+});
+
+test('excludes future deliveries and reviews from replay-bounded metrics', () => {
+  // Counting a delivery or review whose fact timestamp is after replay time must fail this test.
+  const snapshot = createCommerceRepository().getSnapshot({ start: '2018-01-01', end: '2018-01-31' }, '2018-01-04 23:59:59');
+
+  expect(snapshot.commerce).toEqual({
+    paymentAmount: { value: 512, comparisonValue: 0, changeRate: 0 },
+    uniqueBuyerCount: { value: 3, comparisonValue: 0, changeRate: 0 },
+    repeatBuyerCount: { value: 1, comparisonValue: 0, changeRate: 0 },
+  });
+  expect(snapshot.fulfillment).toMatchObject({ averageDeliveryDays: 2, lateDeliveryRate: 1, averageLateDays: 1 });
+  expect(snapshot.experience).toEqual({
+    scoreDistribution: [{ score: 1, value: 1 }, { score: 3, value: 1 }, { score: 4, value: 1 }],
+    lowScoreRate: 1 / 3,
+    averageReplyDays: 0,
+  });
+});
+
 test('calculates only metrics supported by Olist facts', () => {
   // Removing a delivered order from the KPI cohort must fail this test.
   const snapshot = createRepository().getSnapshot(filters, replayNow);
@@ -280,8 +387,8 @@ test('uses matching line-item GMV without duplicating filtered orders', () => {
   ]);
 });
 
-test('changes only the review KPI when an order has two reviews', () => {
-  // Folding reviews into an order-item aggregate must fail this test.
+test('keeps reviews created after replay time out of the review KPI', () => {
+  // Allowing a future review into a replay snapshot must fail this test.
   const database = new DatabaseSync(':memory:');
   databases.push(database);
   createPilotSchema(database);
@@ -298,8 +405,8 @@ test('changes only the review KPI when an order has two reviews', () => {
   database.exec("INSERT INTO reviews VALUES ('second', 'order', 1, NULL, NULL, '2018-01-02 12:00:00', '2018-01-02 13:00:00')");
   const after = repository.getSnapshot({ start: '2018-01-01', end: '2018-01-01' }, '2018-01-01 23:59:59');
 
-  expect(before.kpis.averageReviewScore.value).toBe(5);
-  expect(after.kpis.averageReviewScore.value).toBe(3);
+  expect(before.kpis.averageReviewScore.value).toBe(0);
+  expect(after.kpis.averageReviewScore.value).toBe(0);
   expect(after.kpis.itemGmv.value).toBe(before.kpis.itemGmv.value);
   expect(after.kpis.validOrderCount.value).toBe(before.kpis.validOrderCount.value);
   expect(after.fulfillmentFunnel).toEqual(before.fulfillmentFunnel);
