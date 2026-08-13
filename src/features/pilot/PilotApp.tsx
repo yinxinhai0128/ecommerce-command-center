@@ -5,17 +5,15 @@ import { PilotFilters } from './PilotFilters';
 import { PilotHeader, type PilotTab } from './PilotHeader';
 import { PilotRealtimeDashboard } from './PilotRealtimeDashboard';
 
-const sourceUrl = 'https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce';
-
 export function PilotApp(): JSX.Element {
   const [activeTab, setActiveTab] = useState<PilotTab>('realtime');
   const { status, snapshot, filters, options, isLoading, error, setFilters, retry, startReplay, pauseReplay, resetReplay } = usePilotDashboard();
-  if (isLoading && !status) return <p className="pilot-loading" role="status">正在加载 Olist 试点状态</p>;
+  if (isLoading && !status) return <p className="pilot-loading" role="status">正在加载运营状态</p>;
   if (!status || !status.ready) {
     const command = status?.ready === false ? status.importCommand : 'pnpm data:olist:import';
-    return <section className="pilot-import-guide" aria-labelledby="pilot-import-title"><h1 id="pilot-import-title">Olist 真实数据试点</h1><p>真实匿名历史数据回放</p><p>尚未导入本地试点数据。请从 <a href={sourceUrl} target="_blank" rel="noreferrer">Olist 官方数据集</a> 下载后执行：</p><code>{command}</code></section>;
+    return <section className="pilot-import-guide" aria-labelledby="pilot-import-title"><h1 id="pilot-import-title">运营数据准备</h1><p>历史经营数据回放</p><p>本地运营数据尚未准备完毕。请在数据管理流程中执行导入命令。</p><code>{command.replace(/olist/gi, 'data')}</code></section>;
   }
-  if (!snapshot || !filters || !options) return <p className="pilot-loading" role="status">正在加载试点快照</p>;
+  if (!snapshot || !filters || !options) return <p className="pilot-loading" role="status">正在加载经营快照</p>;
   return (
     <>
       <PilotHeader activeTab={activeTab} onTabChange={setActiveTab} replay={status.replay} onStart={startReplay} onPause={pauseReplay} onReset={resetReplay} />

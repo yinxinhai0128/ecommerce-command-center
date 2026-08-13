@@ -30,10 +30,10 @@ function Ranking({ title, rows, emptyText, onClearFilters }: { title: string; ro
 export function PilotRealtimeDashboard({ snapshot, onClearFilters }: PilotRealtimeDashboardProps): JSX.Element {
   return (
     <div className="pilot-realtime-dashboard">
-      <section className="pilot-kpi-strip" aria-label="Olist 核心经营指标">
+      <section className="pilot-kpi-strip" aria-label="核心经营指标">
         {kpis.map(({ key, label, format, inverse }) => <article key={key} data-testid="pilot-kpi" className="kpi-item"><span>{label}</span><div data-testid={key === 'itemGmv' ? 'pilot-item-gmv' : undefined}><MetricValue value={format(snapshot.kpis[key].value)} change={changeText(snapshot.kpis[key].changeRate, inverse)} /></div></article>)}
       </section>
-      <p data-testid="pilot-source-local-now" className="pilot-cutoff">源数据本地时间 {snapshot.sourceLocalNow}</p>
+      <p data-testid="pilot-source-local-now" className="pilot-cutoff">数据更新时间 {snapshot.sourceLocalNow}</p>
       <Panel title="每日成交趋势"><PilotSalesChart trend={snapshot.dailyTrend} /></Panel>
       <Panel title="履约漏斗">{snapshot.fulfillmentFunnel.length === 0 ? <p className="panel-empty">当前筛选条件下暂无履约数据</p> : <ol className="funnel-list pilot-funnel">{snapshot.fulfillmentFunnel.map((item) => <li key={item.stage}><span>{stageLabel[item.stage]}</span><strong>{item.value.toLocaleString('zh-CN')}</strong></li>)}</ol>}</Panel>
       <div className="pilot-rankings">
@@ -42,7 +42,7 @@ export function PilotRealtimeDashboard({ snapshot, onClearFilters }: PilotRealti
         <Ranking title="客户州排行" rows={snapshot.customerStateRanking.map((row) => ({ label: row.customerState, value: row.itemGmv }))} emptyText="暂无客户州数据" onClearFilters={onClearFilters} />
       </div>
       <Panel title="最近订单">{snapshot.recentOrders.length === 0 ? <p className="panel-empty">当前筛选条件下暂无订单数据</p> : <ul className="pilot-order-list">{snapshot.recentOrders.slice(0, 8).map((order) => <li key={order.orderId}><span>{order.orderId}</span><time dateTime={order.purchasedAt.replace(' ', 'T')}>{order.purchasedAt}</time><strong>¥{order.itemGmv.toLocaleString('zh-CN')}</strong><span>{order.status} · {order.itemCount} 件 · {order.customerState}</span></li>)}</ul>}</Panel>
-      <Panel title="数据使用说明"><p className="panel-empty">本试点仅根据 Olist 的订单、履约与评价事实计算本页指标；未呈现的能力不作推断。</p></Panel>
+      <Panel title="指标说明"><p className="panel-empty">本页根据订单、履约与评价事实计算经营指标；未展示的能力不作推断。</p></Panel>
     </div>
   );
 }
