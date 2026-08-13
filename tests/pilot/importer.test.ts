@@ -1,5 +1,6 @@
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
@@ -33,6 +34,14 @@ test('imports required Olist files and records matching source rows', async () =
     'olist_order_payments_dataset.csv',
     'olist_geolocation_dataset.csv',
   ]));
+  const manifest = JSON.parse(await readFile(join(tempDir, 'manifest.json'), 'utf8'));
+  for (const filename of ['olist_order_payments_dataset.csv', 'olist_geolocation_dataset.csv']) {
+    const sha256 = createHash('sha256').update(await readFile(join(fixtureDir, filename))).digest('hex');
+    expect(result.files[filename].sha256).toBe(sha256);
+    expect(manifest.files[filename].sha256).toBe(sha256);
+  }
+  expect(manifest.tables.payments).toEqual({ sourceRows: 2, importedRows: 2 });
+  expect(manifest.tables.geolocations).toEqual({ sourceRows: 2, importedRows: 2 });
   expect(result.range).toEqual({ start: '2017-01-01', end: '2017-08-01' });
   expect(result.source.license).toBe('CC BY-NC-SA 4.0');
 });
