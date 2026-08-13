@@ -78,7 +78,7 @@ const filteredOrdersCte = `
   ),
   selected_orders AS (
     SELECT *,
-      CASE WHEN delivered_at IS NOT NULL AND delivered_at <= :replayNow THEN 'delivered'
+      CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow THEN 'delivered'
         WHEN carrier_at IS NOT NULL AND carrier_at <= :replayNow THEN 'carrier'
         WHEN approved_at IS NOT NULL AND approved_at <= :replayNow THEN 'approved'
         ELSE 'purchased'

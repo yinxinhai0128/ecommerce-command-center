@@ -244,6 +244,43 @@ test('replays a later-canceled order only through timestamped stages without lea
   expect(carrier.kpis.cancellationRate.value).toBe(0);
 });
 
+test('does not turn a final non-delivered order with a delivery timestamp into a completed sale', () => {
+  // Letting delivered_at alone define the replay status would incorrectly count these malformed final records as sales.
+  const database = new DatabaseSync(':memory:');
+  databases.push(database);
+  createPilotSchema(database);
+  database.exec(`
+    INSERT INTO customers VALUES ('customer', 'unique', '01000', 'sao paulo', 'SP');
+    INSERT INTO sellers VALUES ('seller-1', '30000', 'belo horizonte', 'MG');
+    INSERT INTO products VALUES ('book', 'books', NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    INSERT INTO orders VALUES
+      ('canceled-with-delivery', 'customer', 'canceled', '2018-01-01 10:00:00', '2018-01-01 11:00:00', '2018-01-02 10:00:00', '2018-01-03 10:00:00', '2018-01-04 10:00:00'),
+      ('unavailable-with-delivery', 'customer', 'unavailable', '2018-01-02 10:00:00', '2018-01-02 11:00:00', '2018-01-03 10:00:00', '2018-01-04 10:00:00', '2018-01-05 10:00:00');
+    INSERT INTO order_items VALUES
+      ('canceled-with-delivery', 1, 'book', 'seller-1', '2018-01-01 10:00:00', 40, 0),
+      ('unavailable-with-delivery', 1, 'book', 'seller-1', '2018-01-02 10:00:00', 60, 0);
+  `);
+
+  const snapshot = createPilotRepository(database).getSnapshot({ start: '2018-01-01', end: '2018-01-02' }, '2018-01-05 12:00:00');
+
+  expect(snapshot.kpis.itemGmv.value).toBe(0);
+  expect(snapshot.kpis.validOrderCount.value).toBe(0);
+  expect(snapshot.dailyTrend).toEqual([
+    { date: '2018-01-01', itemGmv: 0, validOrderCount: 0 },
+    { date: '2018-01-02', itemGmv: 0, validOrderCount: 0 },
+  ]);
+  expect(snapshot.contributions).toEqual({ categories: [], sellers: [], customerStates: [] });
+  expect(snapshot.fulfillmentFunnel).toEqual([
+    { stage: 'purchased', value: 2 },
+    { stage: 'approved', value: 2 },
+    { stage: 'carrier', value: 2 },
+    { stage: 'delivered', value: 0 },
+  ]);
+  expect(snapshot.fulfillment.statusDistribution).toEqual([{ status: 'carrier', value: 2 }]);
+  expect(snapshot.recentOrders.map((order) => order.status)).toEqual(['carrier', 'carrier']);
+  expect(snapshot.kpis.cancellationRate.value).toBe(0);
+});
+
 test('calculates only metrics supported by Olist facts', () => {
   // Removing a delivered order from the KPI cohort must fail this test.
   const snapshot = createRepository().getSnapshot(filters, replayNow);

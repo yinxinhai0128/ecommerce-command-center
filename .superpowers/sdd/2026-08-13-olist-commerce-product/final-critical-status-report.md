@@ -22,3 +22,24 @@ Olist 订单只提供最终 `order_status`，但取消、不可用等终态没�
 - `node node_modules/vitest/vitest.mjs run tests/pilot/repository.test.ts --environment=node --pool=forks --maxWorkers=1 --no-file-parallelism --reporter=verbose`：20/20 通过。
 - `node node_modules/typescript/bin/tsc --noEmit`：退出码 0。
 - `git diff --check`：退出码 0，仅 Windows 行尾提示。
+
+## 补充边界修复：异常终态记录
+
+### 根因
+
+`known_status` 曾只依据 `delivered_at <= replayNow` 判定已送达。若一条最终为
+`canceled` 或 `unavailable` 的异常记录仍携带历史送达时间，它会被错误纳入 GMV、有效订单、
+趋势、贡献、送达漏斗和配送指标；这也与配送耗时对原始 `order_status = 'delivered'` 的限制不一致。
+
+### TDD 证据
+
+- 新增两个手算订单：最终状态分别为 `canceled`、`unavailable`，均包含下单、审批、承运和送达时间。
+- RED：修复前定向运行 `tests/pilot/repository.test.ts`，新增用例失败，GMV 实得 `100`、期望 `0`。
+- GREEN：仅将 `known_status` 的送达分支收紧为 `order_status = 'delivered' AND delivered_at <= replayNow`。
+  异常终态记录仍按已知时间显示为 `carrier`，但不会被视为完成交易；取消率保持 `0`，不从没有发生时点的最终状态倒灌事实。
+
+### 验证
+
+- `node node_modules/vitest/vitest.mjs run tests/pilot/repository.test.ts --pool=vmForks --maxWorkers=1 --no-file-parallelism --reporter=verbose`：21/21 通过。
+- `node node_modules/typescript/bin/tsc --noEmit`：退出码 0。
+- `git diff --check`：退出码 0（仅 Windows 行尾提示）。
