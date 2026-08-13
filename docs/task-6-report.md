@@ -28,3 +28,10 @@
 ## 评分与风险
 
 总分为 **96/100**；评分证据和非生产风险详见 `docs/commerce-product-scorecard.md`。主要风险为公开匿名历史数据并非生产连接、仅 Chromium 覆盖、可选模型输出需复核，以及上述全量 Vitest/E2E/截图终态未能在本机会话取得。
+
+## 补充验收（恢复与移动端）
+
+- RED：新增恢复验收首次只让状态请求返回 503；由于三秒轮询自动恢复，十秒内未出现可操作错误提示而失败。随后将路由控制为在点击“重试”前持续返回 503，从而隔离并验证用户可访问的恢复动作；后端未被伪造或修改。
+- GREEN：`pnpm exec playwright test e2e/commerce-product.spec.ts --grep '状态请求失败后' --reporter=line`：`1 passed (12.4s)`。断言错误提示与“重试”可见，解除路由后点击“重试”，确认成功状态响应、经营数据控制台与回放控制恢复，错误提示清除。
+- 390px：`pnpm exec playwright test e2e/commerce-product.spec.ts --grep '390 宽度下可实际' --reporter=line`：`1 passed (12.6s)`。真实进入经营数据，应用 `2017-01-03` 至 `2017-01-31` 合法范围并确认快照请求，启动、暂停、重置回放，且无横向溢出。
+- 每例继续通过 `beforeEach` 重置回放；Playwright 配置仍将 API 隔离在 8788、Vite 隔离在 5174。
