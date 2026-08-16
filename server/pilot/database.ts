@@ -19,4 +19,19 @@ export function createPilotSchema(database: DatabaseSync) {
     CREATE TABLE reviews (review_id TEXT NOT NULL, order_id TEXT NOT NULL REFERENCES orders(order_id), review_score INTEGER NOT NULL, review_comment_title TEXT, review_comment_message TEXT, review_creation_at TEXT NOT NULL, review_answer_at TEXT NOT NULL, PRIMARY KEY (review_id, order_id));
     CREATE TABLE replay_state (id INTEGER PRIMARY KEY CHECK (id = 1), imported_at TEXT NOT NULL);
   `);
+  createPilotIndexes(database);
+}
+
+export function createPilotIndexes(database: DatabaseSync) {
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_orders_purchase_at ON orders(purchase_at);
+    CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
+    CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id);
+    CREATE INDEX IF NOT EXISTS idx_order_items_seller_id ON order_items(seller_id);
+    CREATE INDEX IF NOT EXISTS idx_products_category_name ON products(category_name);
+    CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id);
+    CREATE INDEX IF NOT EXISTS idx_reviews_order_created_at ON reviews(order_id, review_creation_at);
+    CREATE INDEX IF NOT EXISTS idx_customers_state ON customers(state);
+  `);
 }

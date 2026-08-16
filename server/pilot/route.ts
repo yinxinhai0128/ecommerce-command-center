@@ -6,7 +6,7 @@ import { buildPilotAnalysisContext } from './analysisContext';
 import { requestPilotDeepSeekAnalysis } from './deepseekAnalysis';
 import { analyzeLocally } from './localAnalysis';
 import { createPilotRepository } from './repository';
-import { openPilotDatabase } from './database';
+import { createPilotIndexes, openPilotDatabase } from './database';
 import { resolveOlistPaths } from './paths';
 import { createReplayController, type PilotReplayController, type ReplayStateStore } from './replay';
 import { ensureReplayStateSchema, MAX_DATE_RANGE_DAYS, replayActionSchema, snapshotQuerySchema } from './schema';
@@ -96,6 +96,7 @@ export function createPilotRouter(options: PilotRouterOptions = {}): PilotRouter
     const databasePath = resolveOlistPaths(dataDir).databasePath;
     if (!existsSync(databasePath)) throw new Error('Pilot database is unavailable');
     const database = openPilotDatabase(databasePath);
+    createPilotIndexes(database);
     service = {
       repository: createPilotRepository(database),
       replay: createReplayController({ store: replayStore(database), range: manifest.range }),
