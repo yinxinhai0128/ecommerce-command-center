@@ -19,7 +19,7 @@ export function verifyOlistDatabase(databasePath: string): OlistVerification {
         UNION ALL SELECT customer_id FROM customers GROUP BY customer_id HAVING COUNT(*) > 1
         UNION ALL SELECT seller_id FROM sellers GROUP BY seller_id HAVING COUNT(*) > 1
         UNION ALL SELECT product_id FROM products GROUP BY product_id HAVING COUNT(*) > 1
-        UNION ALL SELECT review_id FROM reviews GROUP BY review_id HAVING COUNT(*) > 1
+        UNION ALL SELECT review_id || ':' || order_id FROM reviews GROUP BY review_id, order_id HAVING COUNT(*) > 1
         UNION ALL SELECT order_id || ':' || order_item_id FROM order_items GROUP BY order_id, order_item_id HAVING COUNT(*) > 1
         UNION ALL SELECT order_id || ':' || payment_sequential FROM payments GROUP BY order_id, payment_sequential HAVING COUNT(*) > 1
         UNION ALL SELECT category_name FROM category_translations GROUP BY category_name HAVING COUNT(*) > 1

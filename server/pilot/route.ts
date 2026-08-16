@@ -58,7 +58,7 @@ function loadManifest(dataDir: string): OlistManifest | undefined {
   if (!existsSync(manifestPath)) return undefined;
   try {
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as OlistManifest;
-    return manifest.ready ? manifest : undefined;
+    return manifest.ready && manifest.importerVersion === 2 ? manifest : undefined;
   } catch {
     return undefined;
   }

@@ -3,7 +3,7 @@ import type { AnalysisResult } from '../../src/domain/types';
 export type OlistManifest = {
   ready: true;
   importedAt: string;
-  importerVersion: 1;
+  importerVersion: 2;
   source: {
     dataset: 'olistbr/brazilian-ecommerce';
     url: 'https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce';

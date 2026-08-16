@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApp } from '../../server/index';
@@ -45,7 +45,7 @@ async function readyDataDirectory() {
   await writeFile(paths.manifestPath, JSON.stringify({
     ready: true,
     importedAt: '2026-08-09T00:00:00.000Z',
-    importerVersion: 1,
+    importerVersion: 2,
     source: { dataset: 'olistbr/brazilian-ecommerce', url: 'https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce', license: 'CC BY-NC-SA 4.0' },
     files: {},
     tables: {},
@@ -60,7 +60,7 @@ async function manifestWithoutDatabaseDirectory() {
   await writeFile(paths.manifestPath, JSON.stringify({
     ready: true,
     importedAt: '2026-08-09T00:00:00.000Z',
-    importerVersion: 1,
+    importerVersion: 2,
     source: { dataset: 'olistbr/brazilian-ecommerce', url: 'https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce', license: 'CC BY-NC-SA 4.0' },
     files: {},
     tables: {},
@@ -96,6 +96,19 @@ describe('Olist Pilot API', () => {
 
     expect(response.status).toBe(503);
     expect(response.body).toEqual({ error: 'PILOT_DATABASE_UNAVAILABLE' });
+  });
+
+  test('旧版导入清单不会把缺少九表的数据报告为就绪', async () => {
+    const dataDir = await readyDataDirectory();
+    const paths = resolveOlistPaths(dataDir);
+    const manifest = JSON.parse(await readFile(paths.manifestPath, 'utf8'));
+    manifest.importerVersion = 1;
+    await writeFile(paths.manifestPath, JSON.stringify(manifest));
+
+    const response = await request(createPilotApp(dataDir)).get('/api/pilot/status');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ready: false, importCommand: 'pnpm data:olist:import' });
   });
 
   test('返回服务器计算的快照并拒绝倒序日期范围', async () => {

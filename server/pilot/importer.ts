@@ -41,7 +41,7 @@ export async function importOlistDataset({ sourceDir, dataDir, now = new Date() 
   const hashes: Record<string, { sha256: string }> = {};
   for (const [name, filename] of Object.entries(files) as [keyof typeof files, string][]) {
     const contents = await readFile(join(sourceDir, filename));
-    parsed[name] = parse(contents, { columns: true, skip_empty_lines: true, trim: false }) as Row[];
+    parsed[name] = parse(contents, { bom: true, columns: true, skip_empty_lines: true, trim: false }) as Row[];
     hashes[filename] = { sha256: createHash('sha256').update(contents).digest('hex') };
   }
 
@@ -73,7 +73,7 @@ export async function importOlistDataset({ sourceDir, dataDir, now = new Date() 
     const manifest: OlistManifest = {
       ready: true,
       importedAt,
-      importerVersion: 1,
+      importerVersion: 2,
       source: { dataset: 'olistbr/brazilian-ecommerce', url: 'https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce', license: 'CC BY-NC-SA 4.0' },
       files: hashes,
       tables: Object.fromEntries(Object.entries(files).map(([name, filename]) => [name, { sourceRows: parsed[name as keyof typeof files].length, importedRows: verification.tableRows[name] }])),

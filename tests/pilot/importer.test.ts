@@ -57,6 +57,31 @@ test('reimporting the same source is idempotent', async () => {
   expect(second.itemGmv).toBe(first.itemGmv);
 });
 
+test('imports CSV exports whose first header includes a UTF-8 BOM', async () => {
+  const tempDir = await temporaryDirectory();
+  const sourceDir = join(tempDir, 'source');
+  await cp(fixtureDir, sourceDir, { recursive: true });
+  const translations = join(sourceDir, 'product_category_name_translation.csv');
+  await writeFile(translations, `\uFEFF${await readFile(translations, 'utf8')}`);
+
+  const result = await importOlistDataset({ sourceDir, dataDir: tempDir, now: fixedNow });
+
+  expect(result.tables.categoryTranslations).toEqual({ sourceRows: 2, importedRows: 2 });
+});
+
+test('keeps source reviews that reuse one review ID for different orders', async () => {
+  const tempDir = await temporaryDirectory();
+  const sourceDir = join(tempDir, 'source');
+  await cp(fixtureDir, sourceDir, { recursive: true });
+  const reviews = join(sourceDir, 'olist_order_reviews_dataset.csv');
+  await writeFile(reviews, (await readFile(reviews, 'utf8')).replace('r2,o2,1', 'r1,o2,1'));
+
+  const result = await importOlistDataset({ sourceDir, dataDir: tempDir, now: fixedNow });
+
+  expect(result.tables.reviews).toEqual({ sourceRows: 7, importedRows: 7 });
+  expect(verifyOlistDataset({ dataDir: tempDir }).valid).toBe(true);
+});
+
 test('rolls back when an order item references a missing product', async () => {
   const tempDir = await temporaryDirectory();
   const brokenFixtureDir = join(tempDir, 'broken');

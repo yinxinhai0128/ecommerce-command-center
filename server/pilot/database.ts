@@ -16,7 +16,7 @@ export function createPilotSchema(database: DatabaseSync) {
     CREATE TABLE order_items (order_id TEXT NOT NULL REFERENCES orders(order_id), order_item_id INTEGER NOT NULL, product_id TEXT NOT NULL REFERENCES products(product_id), seller_id TEXT NOT NULL REFERENCES sellers(seller_id), shipping_limit_at TEXT NOT NULL, price REAL NOT NULL, freight_value REAL NOT NULL, PRIMARY KEY (order_id, order_item_id));
     CREATE TABLE payments (order_id TEXT NOT NULL REFERENCES orders(order_id), payment_sequential INTEGER NOT NULL, payment_type TEXT NOT NULL, payment_installments INTEGER NOT NULL, payment_value REAL NOT NULL, PRIMARY KEY (order_id, payment_sequential));
     CREATE TABLE geolocations (zip_code_prefix TEXT NOT NULL, latitude REAL NOT NULL, longitude REAL NOT NULL, city TEXT NOT NULL, state TEXT NOT NULL);
-    CREATE TABLE reviews (review_id TEXT PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(order_id), review_score INTEGER NOT NULL, review_comment_title TEXT, review_comment_message TEXT, review_creation_at TEXT NOT NULL, review_answer_at TEXT NOT NULL);
+    CREATE TABLE reviews (review_id TEXT NOT NULL, order_id TEXT NOT NULL REFERENCES orders(order_id), review_score INTEGER NOT NULL, review_comment_title TEXT, review_comment_message TEXT, review_creation_at TEXT NOT NULL, review_answer_at TEXT NOT NULL, PRIMARY KEY (review_id, order_id));
     CREATE TABLE replay_state (id INTEGER PRIMARY KEY CHECK (id = 1), imported_at TEXT NOT NULL);
   `);
 }

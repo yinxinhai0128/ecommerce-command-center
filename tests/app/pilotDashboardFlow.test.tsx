@@ -65,7 +65,7 @@ test('仅在已挂载且就绪时轮询，并在瞬时失败后保留上一份�
   expect(screen.getByText('￥490.00')).toBeInTheDocument();
   await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
   expect(screen.getByText('￥490.00')).toBeInTheDocument();
-  expect(screen.getByRole('alert')).toHaveTextContent('璇曠偣鏈嶅姟缃戠粶杩炴帴澶辫触');
+  expect(screen.getByRole('alert')).toHaveTextContent('经营数据服务网络连接失败');
   unmount();
   await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
   expect(snapshotRequests).toBe(2);
@@ -209,7 +209,7 @@ test('回放使旧刷新失效并在失败时立即解除 loading、显示错误
   expect(screen.getByText('idle')).toBeInTheDocument();
   rejectReplay(new TypeError('offline'));
   await act(async () => { await Promise.resolve(); });
-  expect(screen.getByRole('alert')).toHaveTextContent('璇曠偣鏈嶅姟缃戠粶杩炴帴澶辫触');
+  expect(screen.getByRole('alert')).toHaveTextContent('经营数据服务网络连接失败');
   expect(screen.getByText('idle')).toBeInTheDocument();
 });
 

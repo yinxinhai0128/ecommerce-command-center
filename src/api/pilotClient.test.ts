@@ -35,7 +35,7 @@ afterEach(() => vi.unstubAllGlobals());
 test('拒绝嵌套 KPI 非数值的试点快照，防止错误数据进入仪表盘', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => response({ ...snapshot, kpis: { ...snapshot.kpis, itemGmv: { value: '490' } } })));
 
-  await expect(requestPilotSnapshot(filters)).rejects.toThrow('璇曠偣鏁版嵁鍝嶅簲鏃犳晥');
+  await expect(requestPilotSnapshot(filters)).rejects.toThrow('经营数据响应无效');
 });
 
 test('拒绝缺少必填支付、买家、履约、体验或贡献段的试点快照', async () => {
@@ -85,7 +85,7 @@ test('回放控制仅发送 action，并返回服务器给出的回放状态', a
 test('状态响应缺少已就绪回放状态时拒绝响应', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => response({ ready: true, range: { start: '2018-01-01', end: '2018-12-31' } })));
 
-  await expect(requestPilotStatus()).rejects.toThrow('璇曠偣鏁版嵁鍝嶅簲鏃犳晥');
+  await expect(requestPilotStatus()).rejects.toThrow('经营数据响应无效');
 });
 
 test.each([
@@ -96,7 +96,7 @@ test.each([
   ['无穷 KPI', { ...snapshot, kpis: { ...snapshot.kpis, itemGmv: { value: null, comparisonValue: 1, changeRate: 1 } } }],
 ])('拒绝%s，避免日期或数值越过客户端边界', async (_name, invalid) => {
   vi.stubGlobal('fetch', vi.fn(async () => response(invalid)));
-  await expect(requestPilotSnapshot(filters)).rejects.toThrow('璇曠偣鏁版嵁鍝嶅簲鏃犳晥');
+  await expect(requestPilotSnapshot(filters)).rejects.toThrow('经营数据响应无效');
 });
 
 test('拒绝无效 ISO 分析生成时间与嵌套元数据本地时间', async () => {
@@ -105,5 +105,5 @@ test('拒绝无效 ISO 分析生成时间与嵌套元数据本地时间', async 
     generatedAt: '2018-02-30T00:00:00Z', metadata: { sourceLocalNow: '2018-02-30 00:00:00' },
   };
   vi.stubGlobal('fetch', vi.fn(async () => response(validAnalysis)));
-  await expect(requestPilotAnalysis(filters, '问题')).rejects.toThrow('璇曠偣鏁版嵁鍝嶅簲鏃犳晥');
+  await expect(requestPilotAnalysis(filters, '问题')).rejects.toThrow('经营数据响应无效');
 });

@@ -2,10 +2,10 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { zipSync } from 'fflate';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { downloadOlistSource } from '../../server/pilot/source';
 
-const requiredFiles = ['olist_orders_dataset.csv', 'olist_order_items_dataset.csv', 'olist_order_reviews_dataset.csv', 'olist_products_dataset.csv', 'olist_customers_dataset.csv', 'olist_sellers_dataset.csv', 'product_category_name_translation.csv'];
+const requiredFiles = ['olist_orders_dataset.csv', 'olist_order_items_dataset.csv', 'olist_order_payments_dataset.csv', 'olist_order_reviews_dataset.csv', 'olist_products_dataset.csv', 'olist_customers_dataset.csv', 'olist_sellers_dataset.csv', 'olist_geolocation_dataset.csv', 'product_category_name_translation.csv'];
 const temporaryDirectories: string[] = [];
 
 async function temporaryDirectory() {
@@ -34,6 +34,15 @@ test('downloads the official archive and extracts exactly the required CSV files
 
   expect(await readFile(result.archivePath)).toEqual(Buffer.from(zip));
   await expect(readFile(join(result.sourceDir, 'olist_orders_dataset.csv'), 'utf8')).resolves.toBe('olist_orders_dataset.csv');
+});
+
+test('streams archive extraction without materializing the response body', async () => {
+  const dataDir = await temporaryDirectory();
+  const response = new Response(archive());
+  vi.spyOn(response, 'arrayBuffer').mockRejectedValue(new Error('whole archive allocation is forbidden'));
+
+  await expect(downloadOlistSource({ dataDir, fetchImpl: fetchResponse(response) })).resolves.toMatchObject({ sourceDir: expect.stringContaining('source') });
+  await expect(readFile(join(dataDir, 'source', 'olist_order_payments_dataset.csv'), 'utf8')).resolves.toBe('olist_order_payments_dataset.csv');
 });
 
 test.each([401, 403])('links to Kaggle manual download when authentication returns %i', async (status) => {

@@ -78,7 +78,7 @@ export function PilotDashboardProvider({ children }: { children: ReactNode }): R
         setSnapshot(nextSnapshot);
       } catch (cause) {
         if (!current() || isAbortError(cause)) return;
-        setError(cause instanceof Error ? cause : new Error('璇曠偣鏁版嵁鍔犺浇澶辫触'));
+        setError(cause instanceof Error ? cause : new Error('经营数据加载失败'));
       } finally {
         if (current()) setIsLoading(false);
       }
@@ -127,14 +127,14 @@ export function PilotDashboardProvider({ children }: { children: ReactNode }): R
     } catch (cause) {
       if (mounted.current && mutationGeneration === replayMutationGeneration.current && !isAbortError(cause)) {
         setIsLoading(false);
-        setError(cause instanceof Error ? cause : new Error('璇曠偣鍥炴斁鎿嶄綔澶辫触'));
+        setError(cause instanceof Error ? cause : new Error('经营数据回放操作失败'));
       }
     } finally {
       if (mutationGeneration === replayMutationGeneration.current) mutationInFlight.current = false;
     }
   }, []);
   const requestAnalysis = useCallback(async (question: string) => {
-    if (!filtersRef.current) throw new Error('璇曠偣灏氭湭灏辩华');
+    if (!filtersRef.current) throw new Error('经营数据尚未就绪');
     analysisController.current?.abort();
     const controller = new AbortController();
     analysisController.current = controller;

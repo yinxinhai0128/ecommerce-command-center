@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import type { PilotAnalysis, PilotFilterOptions, PilotFilters, PilotReplayAction, PilotReplayState, PilotSnapshot, PilotStatus } from '../pilot/types';
 
-const invalidResponse = '璇曠偣鏁版嵁鍝嶅簲鏃犳晥';
-const networkError = '璇曠偣鏈嶅姟缃戠粶杩炴帴澶辫触';
-const serviceError = '璇曠偣鏈嶅姟鏆傛椂涓嶅彲鐢?';
+const invalidResponse = '经营数据响应无效';
+const networkError = '经营数据服务网络连接失败';
+const serviceError = '经营数据服务暂时不可用';
 function isCalendarDate(value: string): boolean {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return false;

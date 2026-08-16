@@ -78,6 +78,28 @@ test('marks duplicate payment sequence keys invalid', async () => {
   expect(verifyOlistDatabase(databasePath)).toMatchObject({ valid: false, duplicatePrimaryKeys: 1 });
 });
 
+test('allows one source review ID to be reused by different orders', async () => {
+  const databasePath = join(await temporaryDirectory(), 'shared-review-id.sqlite');
+  const database = openPilotDatabase(databasePath);
+  database.exec(`
+    CREATE TABLE orders (order_id TEXT, customer_id TEXT, order_status TEXT, purchase_at TEXT);
+    CREATE TABLE order_items (order_id TEXT, order_item_id INTEGER, product_id TEXT, seller_id TEXT, price REAL);
+    CREATE TABLE reviews (review_id TEXT, order_id TEXT);
+    CREATE TABLE products (product_id TEXT);
+    CREATE TABLE customers (customer_id TEXT);
+    CREATE TABLE sellers (seller_id TEXT);
+    CREATE TABLE category_translations (category_name TEXT);
+    CREATE TABLE payments (order_id TEXT, payment_sequential INTEGER);
+    CREATE TABLE geolocations (zip_code_prefix TEXT);
+    INSERT INTO orders VALUES ('o1', 'c1', 'delivered', '2017-01-01 10:00:00'), ('o2', 'c2', 'delivered', '2017-01-02 10:00:00');
+    INSERT INTO customers VALUES ('c1'), ('c2');
+    INSERT INTO reviews VALUES ('shared', 'o1'), ('shared', 'o2');
+  `);
+  database.close();
+
+  expect(verifyOlistDatabase(databasePath)).toMatchObject({ valid: true, duplicatePrimaryKeys: 0, orphanReferences: 0 });
+});
+
 test('marks payment order references that are absent invalid', async () => {
   const databasePath = join(await temporaryDirectory(), 'orphan-payments.sqlite');
   const database = openPilotDatabase(databasePath);
