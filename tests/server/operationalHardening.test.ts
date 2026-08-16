@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { afterEach, expect, test } from 'vitest';
-import { createApp, type App } from '../../server/index';
+import { createApp, runtimeHost, type App } from '../../server/index';
 
 const applications: App[] = [];
 
@@ -32,4 +32,9 @@ test('limits API requests without rate-limiting the health probe', async () => {
 
   expect(limited.status).toBe(429);
   expect(limited.body).toEqual({ error: '请求过于频繁，请稍后重试' });
+});
+
+test('uses loopback by default and accepts an explicit deployment host', () => {
+  expect(runtimeHost({})).toBe('127.0.0.1');
+  expect(runtimeHost({ HOST: '0.0.0.0' })).toBe('0.0.0.0');
 });

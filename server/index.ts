@@ -16,6 +16,10 @@ function apiRateLimitMax(env: Record<string, string | undefined>) {
   return Number.isInteger(configured) && configured > 0 ? configured : 120;
 }
 
+export function runtimeHost(env: Record<string, string | undefined> = process.env) {
+  return env.HOST?.trim() || '127.0.0.1';
+}
+
 export function createApp(options: AppOptions = {}): App {
   const app = express();
   const env = options.env ?? process.env;
@@ -92,5 +96,5 @@ export function createApp(options: AppOptions = {}): App {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT ?? 8787);
   const app = createApp({ pilot: process.env.OLIST_DATA_DIR ? { dataDir: process.env.OLIST_DATA_DIR } : undefined });
-  app.listen(port, '127.0.0.1');
+  app.listen(port, runtimeHost());
 }

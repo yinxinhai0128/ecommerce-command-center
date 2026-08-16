@@ -9,6 +9,7 @@ FROM node:24-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8787
+ENV HOST=0.0.0.0
 ENV OLIST_DATA_DIR=/data/olist
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN corepack enable && pnpm install --prod --frozen-lockfile && mkdir -p /data/olist && chown -R node:node /app /data
