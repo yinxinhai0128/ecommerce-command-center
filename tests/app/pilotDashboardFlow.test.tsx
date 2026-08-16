@@ -111,6 +111,34 @@ test('暂停操作采用服务器返回的状态，而不在客户端伪造回�
   expect(fetchMock).toHaveBeenCalledWith('/api/pilot/replay', expect.objectContaining({ signal: expect.any(AbortSignal) }));
 });
 
+test('暂停后忽略晚到的运行中轮询状态', async () => {
+  let statusRequests = 0;
+  const fetchMock = vi.fn(async (url: RequestInfo | URL) => {
+    const path = String(url);
+    if (path === '/api/pilot/status') {
+      statusRequests += 1;
+      if (statusRequests === 1) return response({ ready: true, range: filters, replay: { sourceLocalNow: '2018-01-31 00:00:00', isRunning: true } });
+      if (statusRequests === 2) return response({ ready: true, range: filters, replay: { sourceLocalNow: '2018-01-31 06:00:00', isRunning: false } });
+      return response({ ready: true, range: filters, replay: { sourceLocalNow: '2018-01-31 12:00:00', isRunning: true } });
+    }
+    if (path === '/api/pilot/filter-options') return response({ categories: [], sellerIds: [], customerStates: [] });
+    if (path.startsWith('/api/pilot/snapshot')) return response(snapshot);
+    if (path === '/api/pilot/replay') return response({ sourceLocalNow: '2018-01-31 06:00:00', isRunning: false });
+    throw new Error(`unexpected ${path}`);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const { result } = renderHook(() => usePilotDashboard(), { wrapper });
+  await flushMicrotasks();
+
+  await act(async () => { await result.current.pauseReplay(); });
+  await flushMicrotasks();
+  expect(result.current.status).toMatchObject({ ready: true, replay: { sourceLocalNow: '2018-01-31 06:00:00', isRunning: false } });
+
+  await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+  await flushMicrotasks();
+  expect(result.current.status).toMatchObject({ ready: true, replay: { sourceLocalNow: '2018-01-31 06:00:00', isRunning: false } });
+});
+
 test('从未就绪恢复时按服务端回放日重建 30 天筛选，且不会留下旧快照或错误', async () => {
   let statusRequests = 0;
   const fetchMock = vi.fn(async (url: RequestInfo | URL) => {

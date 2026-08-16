@@ -32,6 +32,7 @@ export function PilotDashboardProvider({ children }: { children: ReactNode }): R
   const refreshGeneration = useRef(0);
   const replayMutationGeneration = useRef(0);
   const mutationInFlight = useRef(false);
+  const pausedReplayTime = useRef<string | null>(null);
   const analysisGeneration = useRef(0);
   const needsInitialization = useRef(false);
   const filtersRef = useRef<PilotFilters | null>(null);
@@ -54,6 +55,8 @@ export function PilotDashboardProvider({ children }: { children: ReactNode }): R
       try {
         const nextStatus = await requestPilotStatus(controller.signal);
         if (!current()) return;
+        if (nextStatus.ready && pausedReplayTime.current
+          && (nextStatus.replay.isRunning || nextStatus.replay.sourceLocalNow !== pausedReplayTime.current)) return;
         setStatus(nextStatus);
         if (!nextStatus.ready) {
           needsInitialization.current = true;
@@ -120,6 +123,7 @@ export function PilotDashboardProvider({ children }: { children: ReactNode }): R
     try {
       const nextReplay = await controlPilotReplay(action, controller.signal);
       if (!mounted.current || mutationGeneration !== replayMutationGeneration.current || replayController.current !== controller) return;
+      pausedReplayTime.current = action === 'start' ? null : nextReplay.sourceLocalNow;
       setStatus((current) => current?.ready ? { ...current, replay: nextReplay } : current);
       setError(null);
       mutationInFlight.current = false;
