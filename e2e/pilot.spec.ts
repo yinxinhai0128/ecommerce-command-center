@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
@@ -7,6 +8,7 @@ const fixtureDir = join(process.cwd(), 'tests', 'fixtures', 'olist');
 const dataDir = join(process.cwd(), 'test-results', 'olist-e2e-data');
 
 test.beforeAll(async () => {
+  if (existsSync(join(dataDir, 'manifest.json'))) return;
   await rm(dataDir, { force: true, recursive: true });
   await importOlistDataset({ sourceDir: fixtureDir, dataDir });
 });

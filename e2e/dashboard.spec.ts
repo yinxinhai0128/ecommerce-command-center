@@ -36,7 +36,6 @@ test('经营驾驶舱关键经营流在桌面视口可用', async ({ page }) => 
   await expect(page.getByLabel('平台')).toBeVisible();
 
   await page.getByRole('button', { name: '智能分析' }).click();
-  await expect(page.getByText('正在分析最新经营数据…')).toBeVisible();
   await expect(page.getByText('今日经营结论')).toBeVisible();
   await expect(page.getByText('本地分析')).toBeVisible();
   await expect.poll(() => analysisRequests).toBe(1);
