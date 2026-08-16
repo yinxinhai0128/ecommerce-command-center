@@ -35,8 +35,13 @@ test('回放可信 Olist 历史，暂停后时间和当前快照保持不变', a
   await expect(page.getByRole('button', { name: '暂停回放' })).toBeVisible();
   const before = await page.getByTestId('pilot-source-local-now').textContent();
   await expect.poll(async () => page.getByTestId('pilot-source-local-now').textContent()).not.toBe(before);
+  const pauseResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/pilot/replay'
+    && response.request().method() === 'POST' && response.request().postData() === JSON.stringify({ action: 'pause' }));
   await page.getByRole('button', { name: '暂停回放' }).click();
+  const pausedReplay = await (await pauseResponse).json() as { sourceLocalNow: string; isRunning: boolean };
+  expect(pausedReplay.isRunning).toBe(false);
   await expect(page.getByRole('button', { name: '开始回放' })).toBeVisible();
+  await expect(page.getByTestId('pilot-source-local-now')).toHaveText(`数据更新时间 ${pausedReplay.sourceLocalNow}`);
   const pausedTime = await page.getByTestId('pilot-source-local-now').textContent();
   const paused = await page.getByTestId('pilot-item-gmv').textContent();
   await page.waitForTimeout(3500);
