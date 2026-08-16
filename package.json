@@ -2,6 +2,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"vite\" \"node --env-file-if-exists=.env --import tsx --watch server/index.ts\"",
+    "start": "node --env-file-if-exists=.env --import tsx server/index.ts",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -27,6 +28,7 @@
     "pino": "10.3.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "tsx": "^4.23.11",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -42,7 +44,6 @@
     "concurrently": "^10.0.4",
     "jsdom": "^30.0.1",
     "supertest": "^7.2.2",
-    "tsx": "^4.23.11",
     "typescript": "^7.0.2",
     "vite": "^8.2.1",
     "vitest": "^4.1.10"
