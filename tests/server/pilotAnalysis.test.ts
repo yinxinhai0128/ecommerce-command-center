@@ -189,7 +189,11 @@ describe('Olist pilot trusted analysis', () => {
   test('DeepSeek 文本允许事实 label 自带的受控数字并绑定同片支付金额', async () => {
     const summary = '分期：3期 支付金额为420。';
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({ ...modelResult(490), summary }) } }],
+      choices: [{ message: { content: JSON.stringify({
+        ...modelResult(490),
+        summary,
+        causes: [{ factId: 'category:1', label: '品类：books', unit: 'currency', contribution: 300, evidence: '图书贡献来自可信快照。' }],
+      }) } }],
     }), { status: 200, headers: { 'content-type': 'application/json' } }));
     const outcome = await requestPilotDeepSeekAnalysis({
       fetchImpl,

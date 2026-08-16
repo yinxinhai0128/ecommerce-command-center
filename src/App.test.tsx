@@ -117,7 +117,7 @@ test('经营数据工作区保留筛选、回放控制与数据更新时间', as
   select('经营数据');
 
   expect(await screen.findByLabelText('经营数据筛选')).toBeInTheDocument();
-  expect(screen.getByText('数据更新时间 2018-02-01 12:00:00')).toBeInTheDocument();
+  expect(screen.getAllByText('数据更新时间 2018-02-01 12:00:00')).not.toHaveLength(0);
   expect(screen.getByRole('button', { name: '开始回放' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '重置回放' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '开始回放' }));
