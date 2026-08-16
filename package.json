@@ -5,6 +5,7 @@
     "start": "node --env-file-if-exists=.env --import tsx server/index.ts",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
+    "test:ci": "vitest run --pool=forks --maxWorkers=1 --no-file-parallelism",
     "test:watch": "vitest",
     "e2e": "playwright test --grep-invert @screenshots",
     "screenshots": "playwright test --grep @screenshots",
