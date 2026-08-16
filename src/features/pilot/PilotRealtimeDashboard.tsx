@@ -28,10 +28,13 @@ function Ranking({ title, rows, emptyText, onClearFilters }: { title: string; ro
 }
 
 export function PilotRealtimeDashboard({ snapshot, onClearFilters }: PilotRealtimeDashboardProps): JSX.Element {
+  const unavailable = new Set(snapshot.capabilities.filter(({ status }) => status === 'unavailable').map(({ key }) => key));
+  const visibleKpis = kpis.filter(({ key }) => (key !== 'cancellationRate' || !unavailable.has('cancellationTiming'))
+    && (!['onTimeDeliveryRate', 'averageDeliveryDays'].includes(key) || !unavailable.has('fulfillmentOutcomes')));
   return (
     <div className="pilot-realtime-dashboard">
       <section className="pilot-kpi-strip" aria-label="核心经营指标">
-        {kpis.map(({ key, label, format, inverse }) => <article key={key} data-testid="pilot-kpi" className="kpi-item"><span>{label}</span><div data-testid={key === 'itemGmv' ? 'pilot-item-gmv' : undefined}><MetricValue value={format(snapshot.kpis[key].value)} change={changeText(snapshot.kpis[key].changeRate, inverse)} /></div></article>)}
+        {visibleKpis.map(({ key, label, format, inverse }) => <article key={key} data-testid="pilot-kpi" className="kpi-item"><span>{label}</span><div data-testid={key === 'itemGmv' ? 'pilot-item-gmv' : undefined}><MetricValue value={format(snapshot.kpis[key].value)} change={changeText(snapshot.kpis[key].changeRate, inverse)} /></div></article>)}
       </section>
       <p data-testid="pilot-source-local-now" className="pilot-cutoff">数据更新时间 {snapshot.sourceLocalNow}</p>
       <Panel title="每日成交趋势"><PilotSalesChart trend={snapshot.dailyTrend} /></Panel>

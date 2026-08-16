@@ -68,12 +68,12 @@ test('桌面经营数据流程使用可访问侧栏、筛选与稳定的回放�
   await expect(page.getByTestId('pilot-source-local-now')).toContainText(sourceTime);
 });
 
-test('分析将支付、配送和评价问题映射为不同的可信快照回答', async ({ page }) => {
+test('分析对不可判定支付、配送和评价问题返回不同且可信的快照回答', async ({ page }) => {
   await openOperations(page);
   const payment = await ask(page, '支付结构有什么变化？');
   const delivery = await ask(page, '配送时效是否存在问题？');
   const reviews = await ask(page, '评价情况怎么样？');
-  expect(payment).toContain('支付金额');
+  expect(payment).toContain('不可判定');
   expect(delivery).toContain('准时送达率');
   expect(reviews).toContain('平均评分');
   expect(new Set([payment, delivery, reviews]).size).toBe(3);

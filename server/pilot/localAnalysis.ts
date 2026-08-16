@@ -57,6 +57,10 @@ function response(result: Pick<PilotAnalysisResult, 'summary' | 'signals' | 'cau
   return { ...result, source: 'local', generatedAt: now().toISOString(), fallbackReason };
 }
 
+function unavailableResponse(summary: string, fallbackReason: AnalysisFallbackReason, now: () => Date): PilotAnalysisResult {
+  return response({ summary, signals: [], causes: [], risks: [], actions: [], followUps: [asQuestion('还要查看成交、履约或评价情况吗？')] }, fallbackReason, now);
+}
+
 function includesToken(question: string, token: string) {
   const normalized = question.normalize('NFKC').toLowerCase();
   const wanted = token.normalize('NFKC').toLowerCase();
@@ -85,9 +89,9 @@ export function analyzeLocally(context: PilotAnalysisContext, question: string, 
   const kind = classifyQuestion(question);
   const itemGmv = fact(context, 'itemGmv.value');
   const orders = fact(context, 'validOrderCount.value');
-  const cancellation = fact(context, 'cancellationRate.value');
-  const delivery = fact(context, 'onTimeDeliveryRate.value');
-  const deliveryDays = fact(context, 'averageDeliveryDays.value');
+  const cancellation = context.facts.find(({ id }) => id === 'cancellationRate.value');
+  const delivery = context.facts.find(({ id }) => id === 'onTimeDeliveryRate.value');
+  const deliveryDays = context.facts.find(({ id }) => id === 'averageDeliveryDays.value');
   const review = fact(context, 'averageReviewScore.value');
   const requestedDimensions = contributorDimensions(question);
   const contributors = requestedDimensions.length === 0 ? context.contributors : context.contributors.filter(({ dimension }) => requestedDimensions.includes(dimension));
@@ -95,7 +99,7 @@ export function analyzeLocally(context: PilotAnalysisContext, question: string, 
 
   if (kind === 'payment') {
     if (!context.facts.some(({ id }) => id.startsWith('payments.') || id === 'commerce.paymentAmount.value')) {
-      return response({ summary: '当前快照的支付发生时间不可判定，暂不展示支付金额或支付构成。', signals: [], causes: [], risks: [], actions: [], followUps: [asQuestion('还要查看履约或评价情况吗？')] }, fallbackReason, now);
+      return unavailableResponse('当前快照的支付发生时间不可判定，暂不展示支付金额或支付构成。', fallbackReason, now);
     }
     const payment = paymentFact(context, question);
     return response({ summary: `当前${payment.label}为 ${payment.value}。`, signals: [signal(payment, 'flat')], causes: [], risks: [], actions: [action('核对支付结构', '按支付方式观察当前快照金额。', payment.label)], followUps: [asQuestion('还要查看不同分期的支付金额吗？')] }, fallbackReason, now);
@@ -105,6 +109,7 @@ export function analyzeLocally(context: PilotAnalysisContext, question: string, 
     return response({ summary: `当前复购买家数为 ${repeat.value}。`, signals: [signal(repeat, direction(change(context, 'commerce.repeatBuyerCount.changeRate')))], causes: [], risks: [], actions: [action('跟踪复购买家', '持续观察复购买家数。', repeat.label)], followUps: [asQuestion('独立买家数是多少？')] }, fallbackReason, now);
   }
   if (kind === 'lateDelivery') {
+    if (!delivery || !deliveryDays) return unavailableResponse('当前快照没有已送达订单，配送时效不可判定。', fallbackReason, now);
     const late = fact(context, 'fulfillment.lateDeliveryRate');
     return response({ summary: `当前延迟送达率为 ${late.value}。`, signals: [signal(late, 'flat')], causes: [], risks: late.value > 0 ? [{ severity: 'warning', title: '存在延迟送达', evidence: '延迟送达率来自当前可信快照。' }] : [], actions: [action('跟踪延迟送达', '持续观察延迟送达率。', late.label)], followUps: [asQuestion('平均延迟天数是多少？')] }, fallbackReason, now);
   }
@@ -112,10 +117,28 @@ export function analyzeLocally(context: PilotAnalysisContext, question: string, 
     const low = fact(context, 'experience.lowScoreRate');
     return response({ summary: `当前低评分率为 ${low.value}。`, signals: [signal(low, 'flat')], causes: [], risks: low.value > 0 ? [{ severity: 'warning', title: '存在低评分订单', evidence: '低评分率来自当前可信快照。' }] : [], actions: [action('跟踪低评分', '持续观察低评分率。', low.label)], followUps: [asQuestion('平均回复天数是多少？')] }, fallbackReason, now);
   }
-  if (kind === 'cancellation') return response({ summary: `当前取消率为 ${cancellation.value}，对比期为 ${fact(context, 'cancellationRate.comparisonValue').value}。`, signals: [signal(cancellation, direction(change(context, 'cancellationRate.changeRate')))], causes: [], risks: [], actions: [action('复盘取消订单', '按快照跟踪取消率。', cancellation.label)], followUps: [asQuestion('哪些卖家贡献最大？')] }, fallbackReason, now);
-  if (kind === 'delivery') return response({ summary: `当前准时送达率为 ${delivery.value}，平均配送天数为 ${deliveryDays.value}。`, signals: [signal(delivery, direction(change(context, 'onTimeDeliveryRate.changeRate'))), signal(deliveryDays, direction(change(context, 'averageDeliveryDays.changeRate')))], causes: [], risks: [], actions: [action('检查配送链路', '持续观察配送事实。', delivery.label)], followUps: [asQuestion('哪些地区的配送时效需要改善？')] }, fallbackReason, now);
+  if (kind === 'cancellation') {
+    if (!cancellation) return unavailableResponse('当前快照的取消状态发生时间不可判定，暂不展示取消率。', fallbackReason, now);
+    return response({ summary: `当前取消率为 ${cancellation.value}，对比期为 ${fact(context, 'cancellationRate.comparisonValue').value}。`, signals: [signal(cancellation, direction(change(context, 'cancellationRate.changeRate')))], causes: [], risks: [], actions: [action('复盘取消订单', '按快照跟踪取消率。', cancellation.label)], followUps: [asQuestion('哪些卖家贡献最大？')] }, fallbackReason, now);
+  }
+  if (kind === 'delivery') {
+    if (!delivery || !deliveryDays) return unavailableResponse('当前快照没有已送达订单，配送时效不可判定。', fallbackReason, now);
+    return response({ summary: `当前准时送达率为 ${delivery.value}，平均配送天数为 ${deliveryDays.value}。`, signals: [signal(delivery, direction(change(context, 'onTimeDeliveryRate.changeRate'))), signal(deliveryDays, direction(change(context, 'averageDeliveryDays.changeRate')))], causes: [], risks: [], actions: [action('检查配送链路', '持续观察配送事实。', delivery.label)], followUps: [asQuestion('哪些地区的配送时效需要改善？')] }, fallbackReason, now);
+  }
   if (kind === 'reviews') return response({ summary: `当前平均评分为 ${review.value}，对比期为 ${fact(context, 'averageReviewScore.comparisonValue').value}。`, signals: [signal(review, direction(change(context, 'averageReviewScore.changeRate')))], causes: [], risks: [], actions: [action('跟踪评分', '持续观察平均评分。', review.label)], followUps: [asQuestion('评分变化是否与配送时效有关？')] }, fallbackReason, now);
   if (kind === 'contributors') return response({ summary: topContributor ? `当前快照的贡献排行是${contributors.slice(0, 12).map(({ label, itemGmv }) => `${label}，成交额为 ${itemGmv}`).join('；')}。` : '当前快照没有可用的贡献者排行。', signals: contributors.length > 0 ? contributors.slice(0, 12).map(contributorSignal) : [signal(itemGmv, direction(change(context, 'itemGmv.changeRate')))], causes: [], risks: [], actions: [action('跟踪贡献排行', '观察当前快照中的头部贡献者。', topContributor?.label ?? itemGmv.label)], followUps: [asQuestion('头部贡献是否集中在少数卖家？')] }, fallbackReason, now);
   if (kind === 'performance') return response({ summary: `当前成交额为 ${itemGmv.value}，有效订单数为 ${orders.value}。`, signals: [signal(itemGmv, direction(change(context, 'itemGmv.changeRate'))), signal(orders, direction(change(context, 'validOrderCount.changeRate')))], causes: [], risks: [], actions: [action('跟踪成交表现', '结合订单量观察成交变化。', itemGmv.label)], followUps: [asQuestion('还要查看哪些贡献者的当前成交额？')] }, fallbackReason, now);
-  return response({ summary: `经营概览：成交额 ${itemGmv.value}，取消率 ${cancellation.value}，准时送达率 ${delivery.value}，平均评分 ${review.value}。`, signals: [signal(itemGmv, direction(change(context, 'itemGmv.changeRate'))), signal(cancellation, direction(change(context, 'cancellationRate.changeRate'))), signal(delivery, direction(change(context, 'onTimeDeliveryRate.changeRate'))), signal(review, direction(change(context, 'averageReviewScore.changeRate')))], causes: [], risks: [], actions: [action('持续经营诊断', '按成交、取消、配送和评价维度跟进。', itemGmv.label)], followUps: [asQuestion('你想继续查看成交、取消、配送还是评价？')] }, fallbackReason, now);
+  const overviewSignals = [
+    signal(itemGmv, direction(change(context, 'itemGmv.changeRate'))),
+    ...(cancellation ? [signal(cancellation, direction(change(context, 'cancellationRate.changeRate')))] : []),
+    ...(delivery ? [signal(delivery, direction(change(context, 'onTimeDeliveryRate.changeRate')))] : []),
+    signal(review, direction(change(context, 'averageReviewScore.changeRate'))),
+  ];
+  const overview = [
+    `成交额 ${itemGmv.value}`,
+    ...(cancellation ? [`取消率 ${cancellation.value}`] : []),
+    ...(delivery ? [`准时送达率 ${delivery.value}`] : []),
+    `平均评分 ${review.value}`,
+  ];
+  return response({ summary: `经营概览：${overview.join('，')}。`, signals: overviewSignals, causes: [], risks: [], actions: [action('持续经营诊断', '按当前可用经营事实跟进。', itemGmv.label)], followUps: [asQuestion('你想继续查看成交、取消、配送还是评价？')] }, fallbackReason, now);
 }

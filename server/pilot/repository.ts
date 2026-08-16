@@ -100,10 +100,13 @@ const capabilities: PilotCapability[] = [
   { key: 'grossMarginRate', status: 'unavailable', reason: 'Olist 原始数据不包含成本或毛利事实。' },
 ];
 
-function paymentCapabilities(available: boolean): PilotCapability[] {
-  return available
-    ? capabilities
-    : [...capabilities, { key: 'paymentTiming', status: 'unavailable', reason: '支付明细缺少可用于回放的发生时间。' }];
+function snapshotCapabilities(paymentAvailable: boolean, cancellationAvailable: boolean, fulfillmentAvailable: boolean): PilotCapability[] {
+  return [
+    ...capabilities,
+    ...(paymentAvailable ? [] : [{ key: 'paymentTiming', status: 'unavailable' as const, reason: '支付明细缺少可用于回放的发生时间。' }]),
+    ...(cancellationAvailable ? [] : [{ key: 'cancellationTiming', status: 'unavailable' as const, reason: '取消状态缺少可用于回放的发生时间。' }]),
+    ...(fulfillmentAvailable ? [] : [{ key: 'fulfillmentOutcomes', status: 'unavailable' as const, reason: '当前回放时间没有已送达订单，无法计算送达时效。' }]),
+  ];
 }
 
 const toNumber = (value: number | null | undefined) => value ?? 0;
@@ -225,7 +228,7 @@ function contributionRows(database: DatabaseSync, table: typeof currentSelection
 }
 
 export function createPilotRepository(database: DatabaseSync): PilotRepository {
-  const paymentObservationCutoff = String((database.prepare(`
+  const terminalFactCutoff = String((database.prepare(`
     SELECT MAX(COALESCE(delivered_at, carrier_at, approved_at, purchase_at)) AS cutoff FROM orders
   `).get() as { cutoff: string | null }).cutoff ?? '');
 
@@ -240,7 +243,9 @@ export function createPilotRepository(database: DatabaseSync): PilotRepository {
 
     getSnapshot(filters, replayNow) {
       const sourceLocalNow = sourceLocalTime(replayNow);
-      const paymentAvailable = paymentObservationCutoff !== '' && sourceLocalNow >= paymentObservationCutoff;
+      const terminalFactsAvailable = terminalFactCutoff !== '' && sourceLocalNow >= terminalFactCutoff;
+      const paymentAvailable = terminalFactsAvailable;
+      const cancellationAvailable = terminalFactsAvailable;
       const effectiveEnd = endAtReplayTime(filters, replayNow);
       const currentParameters = parameters(filters, filters.start, effectiveEnd, sourceLocalNow);
       const comparison = comparisonRange(filters.start, dateOnly(effectiveEnd));
@@ -252,6 +257,7 @@ export function createPilotRepository(database: DatabaseSync): PilotRepository {
         const previous = summary(database, comparisonSelection, sourceLocalNow);
         const itemGmv = toNumber(current.itemGmv);
         const validOrderCount = toNumber(current.validOrderCount);
+        const fulfillmentAvailable = validOrderCount > 0;
         const comparisonItemGmv = toNumber(previous.itemGmv);
         const comparisonValidOrderCount = toNumber(previous.validOrderCount);
 
@@ -316,9 +322,9 @@ export function createPilotRepository(database: DatabaseSync): PilotRepository {
             itemGmv: asKpi(itemGmv, comparisonItemGmv),
             validOrderCount: asKpi(validOrderCount, comparisonValidOrderCount),
             averageOrderValue: asKpi(validOrderCount === 0 ? 0 : itemGmv / validOrderCount, comparisonValidOrderCount === 0 ? 0 : comparisonItemGmv / comparisonValidOrderCount),
-            cancellationRate: asKpi(toNumber(current.cancellationRate), toNumber(previous.cancellationRate)),
-            onTimeDeliveryRate: asKpi(toNumber(current.onTimeDeliveryRate), toNumber(previous.onTimeDeliveryRate)),
-            averageDeliveryDays: asKpi(toNumber(current.averageDeliveryDays), toNumber(previous.averageDeliveryDays)),
+            cancellationRate: cancellationAvailable ? asKpi(toNumber(current.cancellationRate), toNumber(previous.cancellationRate)) : asKpi(0, 0),
+            onTimeDeliveryRate: fulfillmentAvailable ? asKpi(toNumber(current.onTimeDeliveryRate), toNumber(previous.onTimeDeliveryRate)) : asKpi(0, 0),
+            averageDeliveryDays: fulfillmentAvailable ? asKpi(toNumber(current.averageDeliveryDays), toNumber(previous.averageDeliveryDays)) : asKpi(0, 0),
             averageReviewScore: asKpi(toNumber(current.averageReviewScore), toNumber(previous.averageReviewScore)),
           },
           dailyTrend,
@@ -329,7 +335,7 @@ export function createPilotRepository(database: DatabaseSync): PilotRepository {
           categoryRanking: contributions.categories.map(({ category, itemGmv: rankingItemGmv }) => ({ category, itemGmv: rankingItemGmv })),
           sellerRanking: contributions.sellers.map(({ sellerId, itemGmv: rankingItemGmv }) => ({ sellerId, itemGmv: rankingItemGmv })),
           customerStateRanking: contributions.customerStates.map(({ customerState, itemGmv: rankingItemGmv }) => ({ customerState, itemGmv: rankingItemGmv })),
-          recentOrders, capabilities: paymentCapabilities(paymentAvailable),
+          recentOrders, capabilities: snapshotCapabilities(paymentAvailable, cancellationAvailable, fulfillmentAvailable),
           commerce: {
             paymentAmount: paymentAvailable ? asKpi(toNumber(current.paymentAmount), toNumber(previous.paymentAmount)) : asKpi(0, 0),
             uniqueBuyerCount: asKpi(toNumber(current.uniqueBuyerCount), toNumber(previous.uniqueBuyerCount)),

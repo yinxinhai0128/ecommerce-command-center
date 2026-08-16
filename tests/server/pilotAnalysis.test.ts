@@ -267,6 +267,17 @@ describe('Olist pilot trusted analysis', () => {
     expect(result.signals).toEqual([]);
   });
 
+  test('没有已送达订单时不让分析把送达时效零值当作事实', () => {
+    const unavailable = {
+      ...snapshot,
+      capabilities: [{ key: 'fulfillmentOutcomes', status: 'unavailable' as const, reason: '当前回放时间没有已送达订单，无法计算送达时效。' }],
+    };
+    const result = analyzeLocally(buildPilotAnalysisContext(unavailable), '配送时效是否存在问题？', 'not_configured');
+
+    expect(result.summary).toContain('不可判定');
+    expect(result.signals).toEqual([]);
+  });
+
   test.each([
     ['信用卡', '信用卡支付情况如何', 'payments.byType.credit_card.paymentAmount', '支付方式：credit_card 支付金额', 100],
     ['票据', '票据', 'payments.byType.boleto.paymentAmount', '支付方式：boleto 支付金额', 200],

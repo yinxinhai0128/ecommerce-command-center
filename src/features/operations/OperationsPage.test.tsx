@@ -31,3 +31,13 @@ test('支付发生时间不可判定时不展示未来支付构成', () => {
   expect(screen.getByText('支付明细缺少可用于回放的发生时间。')).toBeInTheDocument();
   expect(screen.queryByText('credit_card：¥80.00')).not.toBeInTheDocument();
 });
+
+test('没有已送达订单时不把送达时效显示为零', () => {
+  render(<OperationsPage snapshot={{
+    ...snapshot,
+    capabilities: [{ key: 'fulfillmentOutcomes', status: 'unavailable', reason: '当前回放时间没有已送达订单，无法计算送达时效。' }],
+  }} />);
+
+  expect(screen.getByText('当前回放时间没有已送达订单，无法计算送达时效。')).toBeInTheDocument();
+  expect(screen.queryByText('平均送达：4.0 天')).not.toBeInTheDocument();
+});
