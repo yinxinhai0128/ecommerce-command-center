@@ -48,11 +48,13 @@ function kpiFacts<T extends Record<string, PilotSnapshot['kpis'][keyof PilotSnap
 }
 
 export function buildPilotAnalysisContext(snapshot: PilotSnapshot, question?: string): PilotAnalysisContext {
+  const paymentAvailable = !snapshot.capabilities.some(({ key, status }) => key === 'paymentTiming' && status === 'unavailable');
+  const availableCommerceDefinitions = paymentAvailable ? commerceDefinitions : commerceDefinitions.filter(({ key }) => key !== 'paymentAmount');
   const facts = [
     ...kpiFacts('', metricDefinitions, snapshot.kpis),
-    ...kpiFacts('commerce.', commerceDefinitions, snapshot.commerce),
-    ...snapshot.payments.byType.map(({ paymentType, paymentAmount }) => ({ id: `payments.byType.${paymentType}.paymentAmount`, label: `支付方式：${cleanLabel(paymentType)} 支付金额`, value: paymentAmount, unit: 'currency' as const })),
-    ...snapshot.payments.installments.map(({ installments, paymentAmount }) => ({ id: `payments.installments.${installments}.paymentAmount`, label: `分期：${installments}期 支付金额`, value: paymentAmount, unit: 'currency' as const })),
+    ...kpiFacts('commerce.', availableCommerceDefinitions, snapshot.commerce),
+    ...(paymentAvailable ? snapshot.payments.byType.map(({ paymentType, paymentAmount }) => ({ id: `payments.byType.${paymentType}.paymentAmount`, label: `支付方式：${cleanLabel(paymentType)} 支付金额`, value: paymentAmount, unit: 'currency' as const })) : []),
+    ...(paymentAvailable ? snapshot.payments.installments.map(({ installments, paymentAmount }) => ({ id: `payments.installments.${installments}.paymentAmount`, label: `分期：${installments}期 支付金额`, value: paymentAmount, unit: 'currency' as const })) : []),
     ...snapshot.fulfillment.statusDistribution.map(({ status, value }) => ({ id: `fulfillment.status.${status}.count`, label: `履约状态：${cleanLabel(status)} 订单数`, value, unit: 'count' as const })),
     { id: 'fulfillment.averageApprovalDays', label: '平均审批天数', value: snapshot.fulfillment.averageApprovalDays, unit: 'days' as const },
     { id: 'fulfillment.averageCarrierDays', label: '平均交运天数', value: snapshot.fulfillment.averageCarrierDays, unit: 'days' as const },
@@ -77,7 +79,7 @@ export function buildPilotAnalysisContext(snapshot: PilotSnapshot, question?: st
   ];
   const trendChanges = [
     ...metricDefinitions.map(({ key, label }) => ({ id: `${key}.changeRate`, label: `${label}变化率`, value: snapshot.kpis[key].changeRate, unit: 'ratio' as const })),
-    ...commerceDefinitions.map(({ key, label }) => ({ id: `commerce.${key}.changeRate`, label: `${label}变化率`, value: snapshot.commerce[key].changeRate, unit: 'ratio' as const })),
+    ...availableCommerceDefinitions.map(({ key, label }) => ({ id: `commerce.${key}.changeRate`, label: `${label}变化率`, value: snapshot.commerce[key].changeRate, unit: 'ratio' as const })),
   ];
   const contributors = [
     ...rankContributors(snapshot.categoryRanking.map(({ category: label, itemGmv }) => ({ label, itemGmv })), 'category'),

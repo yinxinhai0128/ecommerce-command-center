@@ -94,6 +94,9 @@ export function analyzeLocally(context: PilotAnalysisContext, question: string, 
   const topContributor = contributors[0] ?? context.contributors[0];
 
   if (kind === 'payment') {
+    if (!context.facts.some(({ id }) => id.startsWith('payments.') || id === 'commerce.paymentAmount.value')) {
+      return response({ summary: '当前快照的支付发生时间不可判定，暂不展示支付金额或支付构成。', signals: [], causes: [], risks: [], actions: [], followUps: [asQuestion('还要查看履约或评价情况吗？')] }, fallbackReason, now);
+    }
     const payment = paymentFact(context, question);
     return response({ summary: `当前${payment.label}为 ${payment.value}。`, signals: [signal(payment, 'flat')], causes: [], risks: [], actions: [action('核对支付结构', '按支付方式观察当前快照金额。', payment.label)], followUps: [asQuestion('还要查看不同分期的支付金额吗？')] }, fallbackReason, now);
   }

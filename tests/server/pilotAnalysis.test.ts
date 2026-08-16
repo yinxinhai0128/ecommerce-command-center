@@ -101,7 +101,7 @@ async function readyDataDirectory() {
   await writeFile(paths.manifestPath, JSON.stringify({
     ready: true,
     importedAt: '2026-08-09T00:00:00.000Z',
-    importerVersion: 1,
+    importerVersion: 2,
     source: { dataset: 'olistbr/brazilian-ecommerce', url: 'https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce', license: 'CC BY-NC-SA 4.0' },
     files: {},
     tables: {},
@@ -255,6 +255,18 @@ describe('Olist pilot trusted analysis', () => {
     expect(result.signals[0]).toMatchObject({ factId, label, unit: 'currency', value });
   });
 
+  test('支付发生时间不可判定时不让分析引用支付金额', () => {
+    const unavailable = {
+      ...snapshot,
+      capabilities: [{ key: 'paymentTiming', status: 'unavailable' as const, reason: '支付明细缺少可用于回放的发生时间。' }],
+      payments: { byType: [], installments: [] },
+    };
+    const result = analyzeLocally(buildPilotAnalysisContext(unavailable), '支付结构有什么变化？', 'not_configured');
+
+    expect(result.summary).toContain('不可判定');
+    expect(result.signals).toEqual([]);
+  });
+
   test.each([
     ['信用卡', '信用卡支付情况如何', 'payments.byType.credit_card.paymentAmount', '支付方式：credit_card 支付金额', 100],
     ['票据', '票据', 'payments.byType.boleto.paymentAmount', '支付方式：boleto 支付金额', 200],
@@ -335,7 +347,6 @@ describe('Olist pilot trusted analysis', () => {
   });
 
   test.each([
-    ['支付构成', '信用卡支付构成如何？', '支付方式：credit_card 支付金额', 420],
     ['复购买家', '复购买家有多少？', '复购买家数', 1],
     ['延迟配送', '延迟送达情况如何？', '延迟送达率', 0.5],
     ['低评分', '低评分订单多吗？', '低评分率', 0.5],
@@ -350,6 +361,19 @@ describe('Olist pilot trusted analysis', () => {
     expect(response.status).toBe(200);
     expect(response.body.metadata).toEqual({ sourceLocalNow: '2018-01-31 00:00:00' });
     expect(response.body.signals).toContainEqual(expect.objectContaining({ label, value }));
+  });
+
+  test('分析接口在支付发生时间不可判定时不绑定支付事实', async () => {
+    const app = createApp({
+      pilot: { dataDir: await readyDataDirectory(), env: {}, now: () => new Date('2026-08-09T00:00:00.000Z') },
+    });
+    applications.push(app);
+
+    const response = await request(app).post('/api/pilot/analysis').send({ question: '信用卡支付构成如何？', filters });
+
+    expect(response.status).toBe(200);
+    expect(response.body.summary).toContain('不可判定');
+    expect(response.body.signals).toEqual([]);
   });
 
   test('较早分析响应不会收到之后回放快照的数值', async () => {
@@ -690,6 +714,7 @@ describe('Olist pilot trusted analysis', () => {
       fallbackReason: 'invalid_response',
       metadata: { sourceLocalNow: '2018-01-31 00:00:00' },
     });
-    expect(response.body.signals).toContainEqual(expect.objectContaining({ label: '支付方式：credit_card 支付金额', value: 420 }));
+    expect(response.body.summary).toContain('不可判定');
+    expect(response.body.signals).toEqual([]);
   });
 });

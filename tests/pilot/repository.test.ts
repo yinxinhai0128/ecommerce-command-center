@@ -152,7 +152,7 @@ test('excludes future deliveries and reviews from replay-bounded metrics', () =>
   const snapshot = createCommerceRepository().getSnapshot({ start: '2018-01-01', end: '2018-01-31' }, '2018-01-04 23:59:59');
 
   expect(snapshot.commerce).toEqual({
-    paymentAmount: { value: 512, comparisonValue: 0, changeRate: 0 },
+    paymentAmount: { value: 0, comparisonValue: 0, changeRate: 0 },
     uniqueBuyerCount: { value: 3, comparisonValue: 0, changeRate: 0 },
     repeatBuyerCount: { value: 1, comparisonValue: 0, changeRate: 0 },
   });
@@ -161,6 +161,17 @@ test('excludes future deliveries and reviews from replay-bounded metrics', () =>
     scoreDistribution: [{ score: 1, value: 1 }, { score: 3, value: 1 }, { score: 4, value: 1 }],
     lowScoreRate: 1 / 3,
     averageReplyDays: 0,
+  });
+});
+
+test('does not expose untimestamped payment facts during a historical replay', () => {
+  // The Olist payment table has no occurred-at column, so a replay must not invent one from the order timestamp.
+  const snapshot = createCommerceRepository().getSnapshot({ start: '2018-01-01', end: '2018-01-31' }, '2018-01-04 23:59:59');
+
+  expect(snapshot.commerce.paymentAmount).toEqual({ value: 0, comparisonValue: 0, changeRate: 0 });
+  expect(snapshot.payments).toEqual({ byType: [], installments: [] });
+  expect(snapshot.capabilities).toContainEqual({
+    key: 'paymentTiming', status: 'unavailable', reason: '支付明细缺少可用于回放的发生时间。',
   });
 });
 

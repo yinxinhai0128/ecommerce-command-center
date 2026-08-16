@@ -21,3 +21,13 @@ test('经营数据页仅渲染快照已有的支付、客户、履约、体验�
   ['支付方式', '客户结构', '履约状态', '服务体验', '贡献排行'].forEach((name) => expect(screen.getByRole('heading', { name })).toBeInTheDocument());
   ['库存', '毛利', '广告', '流量', '退款', '目标', '预测'].forEach((name) => expect(screen.queryByText(name, { exact: false })).not.toBeInTheDocument());
 });
+
+test('支付发生时间不可判定时不展示未来支付构成', () => {
+  render(<OperationsPage snapshot={{
+    ...snapshot,
+    capabilities: [{ key: 'paymentTiming', status: 'unavailable', reason: '支付明细缺少可用于回放的发生时间。' }],
+  }} />);
+
+  expect(screen.getByText('支付明细缺少可用于回放的发生时间。')).toBeInTheDocument();
+  expect(screen.queryByText('credit_card：¥80.00')).not.toBeInTheDocument();
+});

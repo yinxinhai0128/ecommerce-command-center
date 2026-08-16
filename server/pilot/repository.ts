@@ -100,6 +100,12 @@ const capabilities: PilotCapability[] = [
   { key: 'grossMarginRate', status: 'unavailable', reason: 'Olist 原始数据不包含成本或毛利事实。' },
 ];
 
+function paymentCapabilities(available: boolean): PilotCapability[] {
+  return available
+    ? capabilities
+    : [...capabilities, { key: 'paymentTiming', status: 'unavailable', reason: '支付明细缺少可用于回放的发生时间。' }];
+}
+
 const toNumber = (value: number | null | undefined) => value ?? 0;
 
 function asKpi(value: number, comparisonValue: number): PilotKpi {
@@ -219,6 +225,10 @@ function contributionRows(database: DatabaseSync, table: typeof currentSelection
 }
 
 export function createPilotRepository(database: DatabaseSync): PilotRepository {
+  const paymentObservationCutoff = String((database.prepare(`
+    SELECT MAX(COALESCE(delivered_at, carrier_at, approved_at, purchase_at)) AS cutoff FROM orders
+  `).get() as { cutoff: string | null }).cutoff ?? '');
+
   return {
     getFilterOptions() {
       return {
@@ -230,6 +240,7 @@ export function createPilotRepository(database: DatabaseSync): PilotRepository {
 
     getSnapshot(filters, replayNow) {
       const sourceLocalNow = sourceLocalTime(replayNow);
+      const paymentAvailable = paymentObservationCutoff !== '' && sourceLocalNow >= paymentObservationCutoff;
       const effectiveEnd = endAtReplayTime(filters, replayNow);
       const currentParameters = parameters(filters, filters.start, effectiveEnd, sourceLocalNow);
       const comparison = comparisonRange(filters.start, dateOnly(effectiveEnd));
@@ -258,7 +269,7 @@ export function createPilotRepository(database: DatabaseSync): PilotRepository {
         SELECT order_id AS orderId, purchase_at AS purchasedAt, known_status AS status, item_gmv AS itemGmv, item_count AS itemCount, customer_state AS customerState
           FROM ${currentSelection} ORDER BY purchase_at DESC, order_id DESC LIMIT 20
         `).all() as PilotSnapshot['recentOrders'];
-        const payments = {
+        const payments = paymentAvailable ? {
           byType: database.prepare(`
           SELECT payments.payment_type AS paymentType, COALESCE(SUM(payments.payment_value * CASE WHEN :category IS NULL AND :sellerId IS NULL THEN 1 WHEN selected_orders.all_order_item_gmv = 0 THEN 0 ELSE selected_orders.item_gmv / selected_orders.all_order_item_gmv END), 0) AS paymentAmount
             FROM ${currentSelection} selected_orders JOIN payments ON payments.order_id = selected_orders.order_id
@@ -269,7 +280,7 @@ export function createPilotRepository(database: DatabaseSync): PilotRepository {
             FROM ${currentSelection} selected_orders JOIN payments ON payments.order_id = selected_orders.order_id
           GROUP BY payments.payment_installments ORDER BY installments ASC
           `).all({ category: filters.category ?? null, sellerId: filters.sellerId ?? null }) as NonNullable<PilotSnapshot['payments']>['installments'],
-        };
+        } : { byType: [], installments: [] };
         const fulfillmentRow = database.prepare(`
         SELECT
           COALESCE(AVG(CASE WHEN order_status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at <= :replayNow AND approved_at IS NOT NULL AND approved_at <= :replayNow THEN julianday(approved_at) - julianday(purchase_at) END), 0) AS averageApprovalDays,
@@ -318,9 +329,9 @@ export function createPilotRepository(database: DatabaseSync): PilotRepository {
           categoryRanking: contributions.categories.map(({ category, itemGmv: rankingItemGmv }) => ({ category, itemGmv: rankingItemGmv })),
           sellerRanking: contributions.sellers.map(({ sellerId, itemGmv: rankingItemGmv }) => ({ sellerId, itemGmv: rankingItemGmv })),
           customerStateRanking: contributions.customerStates.map(({ customerState, itemGmv: rankingItemGmv }) => ({ customerState, itemGmv: rankingItemGmv })),
-          recentOrders, capabilities,
+          recentOrders, capabilities: paymentCapabilities(paymentAvailable),
           commerce: {
-            paymentAmount: asKpi(toNumber(current.paymentAmount), toNumber(previous.paymentAmount)),
+            paymentAmount: paymentAvailable ? asKpi(toNumber(current.paymentAmount), toNumber(previous.paymentAmount)) : asKpi(0, 0),
             uniqueBuyerCount: asKpi(toNumber(current.uniqueBuyerCount), toNumber(previous.uniqueBuyerCount)),
             repeatBuyerCount: asKpi(toNumber(current.repeatBuyerCount), toNumber(previous.repeatBuyerCount)),
           },
