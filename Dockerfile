@@ -1,6 +1,6 @@
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN corepack enable && pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
@@ -10,7 +10,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8787
 ENV OLIST_DATA_DIR=/data/olist
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN corepack enable && pnpm install --prod --frozen-lockfile && mkdir -p /data/olist && chown -R node:node /app /data
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server ./server
