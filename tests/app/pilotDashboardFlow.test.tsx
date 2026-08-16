@@ -206,7 +206,7 @@ test('回放变更进行中跳过轮询，并在最新服务器回放状态后�
   let isRunning = true;
   const fetchMock = vi.fn((url: RequestInfo | URL) => {
     const path = String(url);
-    if (path === '/api/pilot/status') return Promise.resolve(response({ ready: true, range: filters, replay: { sourceLocalNow: '2018-01-31 00:00:00', isRunning } }));
+    if (path === '/api/pilot/status') return Promise.resolve(response({ ready: true, range: filters, replay: { sourceLocalNow: isRunning ? '2018-01-31 00:00:00' : '2018-01-31 12:00:00', isRunning } }));
     if (path === '/api/pilot/filter-options') return Promise.resolve(response({ categories: [], sellerIds: [], customerStates: [] }));
     if (path.startsWith('/api/pilot/snapshot')) return Promise.resolve(response(snapshot));
     if (path === '/api/pilot/replay') return new Promise<Response>((resolve) => { resolveReplay = resolve; });
