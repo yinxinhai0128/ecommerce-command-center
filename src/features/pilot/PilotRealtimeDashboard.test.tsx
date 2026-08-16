@@ -14,13 +14,13 @@ const snapshot: PilotSnapshot = {
   contributions: { categories: [], sellers: [], customerStates: [] },
 };
 
-test('只展示七个受 Olist 支持的 KPI，并标注源数据本地截止时间', () => {
+test('只展示七个受 Olist 支持的 KPI，并标注数据更新时间', () => {
   render(<PilotRealtimeDashboard snapshot={snapshot} onClearFilters={() => undefined} />);
 
   expect(screen.getAllByTestId('pilot-kpi')).toHaveLength(7);
   expect(screen.getByText('商品成交额')).toBeInTheDocument();
   expect(screen.getByText('准时送达率')).toBeInTheDocument();
-  expect(screen.getByText('源数据本地时间 2018-01-31 09:30:00')).toBeInTheDocument();
+  expect(screen.getByText('数据更新时间 2018-01-31 09:30:00')).toBeInTheDocument();
   expect(screen.queryByText('库存风险')).not.toBeInTheDocument();
 });
 

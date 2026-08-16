@@ -10,6 +10,9 @@ permissions:
 jobs:
   application:
     runs-on: ubuntu-latest
+    env:
+      # 模拟经营模块以中国业务日切分；避免 CI 宿主时区改变日粒度口径。
+      TZ: Asia/Shanghai
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

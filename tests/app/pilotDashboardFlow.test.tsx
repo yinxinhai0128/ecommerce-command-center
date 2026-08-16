@@ -5,11 +5,17 @@ import { PilotDashboardProvider } from '../../src/app/PilotDashboardProvider';
 import { usePilotDashboard } from '../../src/app/usePilotDashboard';
 
 const filters = { start: '2018-01-01', end: '2018-01-31' };
+const metric = { value: 490, comparisonValue: 400, changeRate: 0.225 };
 const snapshot = {
   filters,
   sourceLocalNow: '2018-01-31 00:00:00', comparisonLabel: '较上期',
-  kpis: Object.fromEntries(['itemGmv', 'validOrderCount', 'averageOrderValue', 'cancellationRate', 'onTimeDeliveryRate', 'averageDeliveryDays', 'averageReviewScore'].map((key) => [key, { value: 490, comparisonValue: 400, changeRate: 0.225 }])),
+  kpis: Object.fromEntries(['itemGmv', 'validOrderCount', 'averageOrderValue', 'cancellationRate', 'onTimeDeliveryRate', 'averageDeliveryDays', 'averageReviewScore'].map((key) => [key, metric])),
   dailyTrend: [], fulfillmentFunnel: [], categoryRanking: [], sellerRanking: [], customerStateRanking: [], recentOrders: [], capabilities: [],
+  commerce: { paymentAmount: metric, uniqueBuyerCount: metric, repeatBuyerCount: metric },
+  payments: { byType: [], installments: [] },
+  fulfillment: { statusDistribution: [], averageApprovalDays: 0, averageCarrierDays: 0, averageDeliveryDays: 0, lateDeliveryRate: 0, averageLateDays: 0 },
+  experience: { scoreDistribution: [], lowScoreRate: 0, averageReplyDays: 0 },
+  contributions: { categories: [], sellers: [], customerStates: [] },
 };
 
 function response(body: unknown): Response { return new Response(JSON.stringify(body)); }

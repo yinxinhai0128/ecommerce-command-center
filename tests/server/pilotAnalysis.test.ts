@@ -191,17 +191,14 @@ describe('Olist pilot trusted analysis', () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify({ ...modelResult(490), summary }) } }],
     }), { status: 200, headers: { 'content-type': 'application/json' } }));
-    const app = createApp({
-      pilot: {
-        dataDir: await readyDataDirectory(), fetchImpl, env: { DEEPSEEK_API_KEY: 'server-key' },
-        now: () => new Date('2026-08-09T00:00:00.000Z'),
-      },
+    const outcome = await requestPilotDeepSeekAnalysis({
+      fetchImpl,
+      apiKey: 'server-key',
+      context: buildPilotAnalysisContext(snapshot, '3期分期支付情况如何？'),
+      now: () => new Date('2026-08-09T00:00:00.000Z'),
     });
-    applications.push(app);
 
-    const response = await request(app).post('/api/pilot/analysis').send({ question: '3期分期支付情况如何？', filters });
-
-    expect(response.body).toMatchObject({ source: 'deepseek', summary });
+    expect(outcome).toMatchObject({ analysis: { source: 'deepseek', summary } });
   });
 
   test.each([
