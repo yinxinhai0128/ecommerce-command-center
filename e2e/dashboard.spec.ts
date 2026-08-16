@@ -19,13 +19,6 @@ async function expectNoHorizontalOverflow(page: Page): Promise<void> {
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 }
 
-async function expectAnalysisApiReady(page: Page): Promise<void> {
-  await expect.poll(async () => {
-    const response = await page.request.get('/api/readiness-check');
-    return response.status();
-  }).toBe(404);
-}
-
 test('经营驾驶舱关键经营流在桌面视口可用', async ({ page }) => {
   const consoleMessages = collectRelevantConsole(page);
   let analysisRequests = 0;
@@ -35,17 +28,14 @@ test('经营驾驶舱关键经营流在桌面视口可用', async ({ page }) => 
 
   await page.goto('/');
   await expect(page).toHaveTitle(/.+/);
-  await expect(page.getByRole('heading', { name: '经营驾驶舱' })).toBeVisible();
-  await expect(page.getByText('GMV').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: '经营概览' })).toBeVisible();
   await expect(page.locator('body')).not.toContainText(/Internal Server Error|Vite Error|Unexpected Application Error/);
-  await expectAnalysisApiReady(page);
 
-  await page.getByRole('button', { name: '暂停更新' }).click();
-  await expect(page.getByText('已暂停')).toBeVisible();
-  await page.getByRole('button', { name: '恢复更新' }).click();
-  await expect(page.getByText('实时运行中')).toBeVisible();
+  await page.getByRole('button', { name: '实时监控' }).click();
+  await expect(page.getByRole('heading', { name: '分钟经营脉冲' })).toBeVisible();
+  await expect(page.getByLabel('平台')).toBeVisible();
 
-  await page.getByRole('tab', { name: '智能分析' }).click();
+  await page.getByRole('button', { name: '智能分析' }).click();
   await expect(page.getByText('正在分析最新经营数据…')).toBeVisible();
   await expect(page.getByText('今日经营结论')).toBeVisible();
   await expect(page.getByText('本地分析')).toBeVisible();
@@ -59,10 +49,12 @@ test('经营驾驶舱关键经营流在桌面视口可用', async ({ page }) => 
   await expect(page.getByText('行动建议')).toBeVisible();
   await expect.poll(() => analysisRequests).toBe(2);
 
+  await page.getByRole('button', { name: '实时监控' }).click();
   await page.getByLabel('平台').selectOption({ index: 1 });
-  await expect(page.getByRole('button', { name: '数据已变化，重新分析' })).toBeVisible();
-  await page.waitForTimeout(500);
-  expect(analysisRequests).toBe(2);
+  await expect(page.getByLabel('平台')).toHaveValue('京东');
+  await page.getByRole('button', { name: '智能分析' }).click();
+  await expect(page.getByText('本地分析')).toBeVisible();
+  await expect.poll(() => analysisRequests).toBe(3);
 
   for (const viewport of viewports) {
     await page.setViewportSize(viewport);
@@ -77,15 +69,13 @@ test('保存三个桌面视口的实时监控与智能分析截图 @screenshots'
   for (const viewport of viewports) {
     await page.setViewportSize(viewport);
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: '经营驾驶舱' })).toBeVisible();
-    await expect(page.getByText('实时运行中')).toBeVisible();
-    await expect(page.getByRole('button', { name: '暂停更新' })).toBeVisible();
-    await expectAnalysisApiReady(page);
+    await page.getByRole('button', { name: '实时监控' }).click();
+    await expect(page.getByRole('heading', { name: '分钟经营脉冲' })).toBeVisible();
     await page.waitForTimeout(500);
     await expectNoHorizontalOverflow(page);
     await page.screenshot({ path: `screenshots/realtime-${viewport.name}.png`, fullPage: false });
 
-    await page.getByRole('tab', { name: '智能分析' }).click();
+    await page.getByRole('button', { name: '智能分析' }).click();
     await expect(page.getByText('今日经营结论')).toBeVisible();
     await expect(page.getByText('本地分析')).toBeVisible();
     await expectNoHorizontalOverflow(page);

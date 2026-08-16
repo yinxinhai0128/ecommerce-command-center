@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { AnalysisResult, DashboardAlert, DashboardFilters, DashboardSnapshot } from '../../domain/types';
 import { AnalysisDashboard } from './AnalysisDashboard';
@@ -91,6 +92,13 @@ afterEach(() => {
 });
 
 describe('智能分析生命周期', () => {
+  test('StrictMode 重新挂载后会重新发起被清理的初始分析请求', async () => {
+    render(<StrictMode><AnalysisDashboard snapshot={snapshot} alerts={alerts} filters={filters} active /></StrictMode>);
+
+    await screen.findByText(result.summary);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   test('inactive时不请求，首次激活请求一次且保持挂载切换不重复请求', async () => {
     const { rerender } = renderDashboard(false);
     const fetchMock = vi.mocked(fetch);
