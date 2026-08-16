@@ -32,6 +32,7 @@ export function PilotDashboardProvider({ children }: { children: ReactNode }): R
   const refreshGeneration = useRef(0);
   const replayMutationGeneration = useRef(0);
   const mutationInFlight = useRef(false);
+  const refreshInFlight = useRef(false);
   const pausedReplayTime = useRef<string | null>(null);
   const analysisGeneration = useRef(0);
   const needsInitialization = useRef(false);
@@ -40,15 +41,17 @@ export function PilotDashboardProvider({ children }: { children: ReactNode }): R
   const requestController = useRef<AbortController | null>(null);
   const replayController = useRef<AbortController | null>(null);
   const analysisController = useRef<AbortController | null>(null);
-  const refreshRef = useRef<(loadOptions: boolean) => void>(() => undefined);
+  const refreshRef = useRef<(loadOptions: boolean, force?: boolean) => void>(() => undefined);
 
-  const refresh = useCallback((loadOptions: boolean) => {
+  const refresh = useCallback((loadOptions: boolean, force = false) => {
     if (mutationInFlight.current) return;
+    if (refreshInFlight.current && !force) return;
     requestController.current?.abort();
     const controller = new AbortController();
     requestController.current = controller;
     const requestGeneration = ++refreshGeneration.current;
     const current = () => mounted.current && requestGeneration === refreshGeneration.current && requestController.current === controller && !mutationInFlight.current;
+    refreshInFlight.current = true;
     setIsLoading(true);
     setError(null);
     void (async () => {
@@ -83,6 +86,7 @@ export function PilotDashboardProvider({ children }: { children: ReactNode }): R
         if (!current() || isAbortError(cause)) return;
         setError(cause instanceof Error ? cause : new Error('经营数据加载失败'));
       } finally {
+        if (requestController.current === controller) refreshInFlight.current = false;
         if (current()) setIsLoading(false);
       }
     })();
@@ -108,9 +112,9 @@ export function PilotDashboardProvider({ children }: { children: ReactNode }): R
   const setFilters = useCallback((nextFilters: PilotFilters) => {
     filtersRef.current = nextFilters;
     setFiltersState(nextFilters);
-    refreshRef.current(false);
+    refreshRef.current(false, true);
   }, []);
-  const retry = useCallback(() => refreshRef.current(true), []);
+  const retry = useCallback(() => refreshRef.current(true, true), []);
   const replay = useCallback(async (action: PilotReplayAction) => {
     requestController.current?.abort();
     refreshGeneration.current += 1;
@@ -127,7 +131,7 @@ export function PilotDashboardProvider({ children }: { children: ReactNode }): R
       setStatus((current) => current?.ready ? { ...current, replay: nextReplay } : current);
       setError(null);
       mutationInFlight.current = false;
-      refreshRef.current(false);
+      refreshRef.current(false, true);
     } catch (cause) {
       if (mounted.current && mutationGeneration === replayMutationGeneration.current && !isAbortError(cause)) {
         setIsLoading(false);

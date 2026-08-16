@@ -177,6 +177,33 @@ test('重复重试不额外创建轮询计时器', async () => {
   expect(fetchMock.mock.calls.length).toBe(beforePoll + 1);
 });
 
+test('快照请求尚未完成时跳过下一次轮询，避免慢查询并发', async () => {
+  const pendingSnapshot = deferred<Response>();
+  let snapshotRequests = 0;
+  const fetchMock = vi.fn((url: RequestInfo | URL) => {
+    const path = String(url);
+    if (path === '/api/pilot/status') return Promise.resolve(response({ ready: true, range: filters, replay: { sourceLocalNow: '2018-01-31 00:00:00', isRunning: true } }));
+    if (path === '/api/pilot/filter-options') return Promise.resolve(response({ categories: [], sellerIds: [], customerStates: [] }));
+    if (path.startsWith('/api/pilot/snapshot')) {
+      snapshotRequests += 1;
+      return snapshotRequests === 1 ? pendingSnapshot.promise : Promise.resolve(response(snapshot));
+    }
+    throw new Error(`unexpected ${path}`);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  render(<PilotDashboardProvider><Probe /></PilotDashboardProvider>);
+  await flushMicrotasks();
+  expect(snapshotRequests).toBe(1);
+
+  await act(async () => { await vi.advanceTimersByTimeAsync(9000); });
+  expect(snapshotRequests).toBe(1);
+
+  pendingSnapshot.resolve(response(snapshot));
+  await flushMicrotasks();
+  await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+  expect(snapshotRequests).toBe(2);
+});
+
 test('卸载会取消分析请求；即使旧请求忽略取消并随后返回，也只得到 AbortError', async () => {
   let resolveAnalysis: (value: Response) => void = () => undefined;
   let analysisSignal: AbortSignal | undefined;
