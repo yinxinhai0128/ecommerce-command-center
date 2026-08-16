@@ -1,4 +1,8 @@
 import express, { type Express } from 'express';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import pino from 'pino';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { createAnalysisRouter, type AnalysisRouterOptions } from './analysis/route';
@@ -7,8 +11,41 @@ import { createPilotRouter, type PilotRouterOptions } from './pilot/route';
 export type AppOptions = AnalysisRouterOptions & { pilot?: PilotRouterOptions };
 export type App = Express & { dispose(): void };
 
+function apiRateLimitMax(env: Record<string, string | undefined>) {
+  const configured = Number(env.API_RATE_LIMIT_MAX);
+  return Number.isInteger(configured) && configured > 0 ? configured : 120;
+}
+
 export function createApp(options: AppOptions = {}): App {
   const app = express();
+  const env = options.env ?? process.env;
+  const logger = pino({ level: env.LOG_LEVEL ?? 'info', base: undefined });
+  app.use(helmet());
+  app.use((req, res, next) => {
+    const requestId = randomUUID();
+    const startedAt = performance.now();
+    res.setHeader('X-Request-Id', requestId);
+    res.on('finish', () => {
+      logger.info({
+        requestId,
+        method: req.method,
+        path: req.path,
+        statusCode: res.statusCode,
+        durationMs: Math.round(performance.now() - startedAt),
+      }, 'http_request');
+    });
+    next();
+  });
+  app.get('/healthz', (_req, res) => {
+    res.json({ status: 'ok' });
+  });
+  app.use('/api', rateLimit({
+    windowMs: 60_000,
+    max: apiRateLimitMax(env),
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    message: { error: '请求过于频繁，请稍后重试' },
+  }));
   app.use(express.json({ limit: '64kb' }));
   app.use('/api/analysis', createAnalysisRouter(options));
   const pilotRouter = createPilotRouter({
