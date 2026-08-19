@@ -2,7 +2,6 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DashboardAlert, DashboardSnapshot } from '../../domain/types';
-import { App } from '../../App';
 import { RealtimeDashboard } from './RealtimeDashboard';
 
 let chartOptions: ComponentProps<typeof import('echarts-for-react').default>['option'][] = [];
@@ -212,15 +211,4 @@ test('拆解区为空时给出真实空态', () => {
 
   expect(within(document.querySelector('.breakdown-panels') as HTMLElement).getAllByText('当前筛选条件下暂无数据')).toHaveLength(3);
   expect(screen.getByText('暂无经营预警')).toBeInTheDocument();
-});
-
-test('应用在实时标签装配仪表盘，切换分析标签时隐藏实时面板', () => {
-  render(<App />);
-
-  const realtimePanel = document.getElementById('dashboard-panel-realtime')!;
-  expect(realtimePanel).toHaveTextContent('实时订单');
-  fireEvent.click(document.getElementById('dashboard-tab-analysis')!);
-
-  expect(realtimePanel).toHaveAttribute('hidden');
-  expect(document.getElementById('dashboard-panel-analysis')).not.toHaveAttribute('hidden');
 });

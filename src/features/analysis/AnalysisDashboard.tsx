@@ -75,7 +75,10 @@ export function AnalysisDashboard({ snapshot, alerts, filters, active }: Analysi
     if (result && lastRequestedFingerprint.current !== contextFingerprint) setStale(true);
   }, [contextFingerprint, result]);
 
-  useEffect(() => () => controller.current?.abort(), []);
+  useEffect(() => () => {
+    controller.current?.abort();
+    requestedOnce.current = false;
+  }, []);
 
   const loading = requestState === 'loading';
   return (

@@ -1,0 +1,51 @@
+name: Verify
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    env:
+      # 模拟经营模块以中国业务日切分；避免 CI 宿主时区改变日粒度口径。
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:ci
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
+
+  container:
+    needs: application
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --tag ecommerce-command-center:ci .
+      - name: Run container health check
+        run: |
+          docker run --detach --rm --name ecommerce-command-center-ci --publish 8787:8787 ecommerce-command-center:ci
+          cleanup() {
+            docker logs ecommerce-command-center-ci || true
+            docker stop ecommerce-command-center-ci || true
+          }
+          trap cleanup EXIT
+          for attempt in {1..70}; do
+            if curl --fail --silent --show-error http://127.0.0.1:8787/healthz; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1

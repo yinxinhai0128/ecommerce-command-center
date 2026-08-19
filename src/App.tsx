@@ -1,41 +1,34 @@
-import { useState, type JSX } from 'react';
+import { lazy, Suspense, useState, type JSX } from 'react';
 import { DashboardProvider } from './app/DashboardProvider';
-import { AppHeader, type DashboardTab } from './ui/AppHeader';
-import { GlobalFilters } from './ui/GlobalFilters';
+import { PilotDashboardProvider } from './app/PilotDashboardProvider';
 import { useDashboard } from './app/useDashboard';
-import { RealtimeDashboard } from './features/realtime/RealtimeDashboard';
+import { AppShell } from './coreui/AppShell';
+import type { ProductView } from './coreui/navigation';
 import { AnalysisDashboard } from './features/analysis/AnalysisDashboard';
+import { PilotApp } from './features/pilot/PilotApp';
+import { RealtimeDashboard } from './features/realtime/RealtimeDashboard';
+import { GlobalFilters } from './ui/GlobalFilters';
 
-function DashboardApp(): JSX.Element {
-  const [activeTab, setActiveTab] = useState<DashboardTab>('realtime');
+const OverviewPage = lazy(async () => ({ default: (await import('./features/overview/OverviewPage')).OverviewPage }));
+
+function Loading(): JSX.Element { return <p className="workspace-loading" role="status">正在加载</p>; }
+
+function StandardWorkspace({ view }: { view: Exclude<ProductView, 'operations'> }): JSX.Element {
   const { snapshot, alerts, filters, isRunning } = useDashboard();
+  if (view === 'overview') return <OverviewPage snapshot={snapshot} />;
+  return <><GlobalFilters />{view === 'analysis' ? <AnalysisDashboard snapshot={snapshot} alerts={alerts} filters={filters} active /> : <RealtimeDashboard snapshot={snapshot} alerts={alerts} isRunning={isRunning} />}</>;
+}
 
-  return (
-    <main className="dashboard-app">
-      <AppHeader activeTab={activeTab} onTabChange={setActiveTab} />
-      <GlobalFilters />
-      <section
-        id="dashboard-panel-realtime"
-        className="dashboard-content"
-        role="tabpanel"
-        aria-labelledby="dashboard-tab-realtime"
-        hidden={activeTab !== 'realtime'}
-      ><RealtimeDashboard snapshot={snapshot} alerts={alerts} isRunning={isRunning} /></section>
-      <section
-        id="dashboard-panel-analysis"
-        className="dashboard-content"
-        role="tabpanel"
-        aria-labelledby="dashboard-tab-analysis"
-        hidden={activeTab !== 'analysis'}
-      ><AnalysisDashboard snapshot={snapshot} alerts={alerts} filters={filters} active={activeTab === 'analysis'} /></section>
-    </main>
-  );
+function OperationsWorkspace(): JSX.Element {
+  return <PilotApp />;
+}
+
+function Workspace({ view }: { view: ProductView }): JSX.Element {
+  if (view === 'operations') return <PilotDashboardProvider><OperationsWorkspace /></PilotDashboardProvider>;
+  return <DashboardProvider><StandardWorkspace view={view} /></DashboardProvider>;
 }
 
 export function App(): JSX.Element {
-  return (
-    <DashboardProvider>
-      <DashboardApp />
-    </DashboardProvider>
-  );
+  const [activeView, setActiveView] = useState<ProductView>('overview');
+  return <main className="dashboard-app"><AppShell activeView={activeView} onViewChange={setActiveView}><Suspense fallback={<Loading />}><Workspace view={activeView} /></Suspense></AppShell></main>;
 }
