@@ -4,10 +4,12 @@ import { generateDataset } from '../data/generateDataset';
 import type { Category, DashboardAlert, DashboardFilters, DashboardSnapshot, Platform, Store } from '../domain/types';
 import { detectAnomalies } from '../metrics/detectAnomalies';
 import { calculateSnapshot } from '../metrics/calculateMetrics';
+import { runDataQualityChecks, type DataQualityReport } from '../metrics/dataQuality';
 
 export type DashboardContextValue = {
   snapshot: DashboardSnapshot;
   alerts: DashboardAlert[];
+  dataQuality: DataQualityReport;
   filters: DashboardFilters;
   setFilters: Dispatch<SetStateAction<DashboardFilters>>;
   isRunning: boolean;
@@ -48,6 +50,7 @@ export function DashboardProvider({ children }: { children: ReactNode }): ReactN
 
   const snapshot = useMemo(() => calculateSnapshot(dataset, filters, lastUpdatedAt), [dataset, filters, lastUpdatedAt]);
   const alerts = useMemo(() => detectAnomalies(snapshot), [snapshot]);
+  const dataQuality = useMemo(() => runDataQualityChecks(dataset), [dataset]);
   const filterOptions = useMemo(() => ({
     platforms: Array.from(new Set(dataset.orders.map((order) => order.platform))),
     stores: dataset.stores,
@@ -56,13 +59,14 @@ export function DashboardProvider({ children }: { children: ReactNode }): ReactN
   const value = useMemo<DashboardContextValue>(() => ({
     snapshot,
     alerts,
+    dataQuality,
     filters,
     setFilters,
     isRunning,
     toggleRunning: () => setIsRunning((running) => !running),
     lastUpdatedAt,
     filterOptions,
-  }), [alerts, filterOptions, filters, isRunning, lastUpdatedAt, snapshot]);
+  }), [alerts, dataQuality, filterOptions, filters, isRunning, lastUpdatedAt, snapshot]);
 
   return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>;
 }

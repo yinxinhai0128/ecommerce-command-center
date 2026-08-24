@@ -5,15 +5,17 @@ import { GlobalFilters } from './ui/GlobalFilters';
 import { useDashboard } from './app/useDashboard';
 import { RealtimeDashboard } from './features/realtime/RealtimeDashboard';
 import { AnalysisDashboard } from './features/analysis/AnalysisDashboard';
+import { DataQualityBanner } from './features/realtime/DataQualityBanner';
 
 function DashboardApp(): JSX.Element {
   const [activeTab, setActiveTab] = useState<DashboardTab>('realtime');
-  const { snapshot, alerts, filters, isRunning } = useDashboard();
+  const { snapshot, alerts, filters, isRunning, dataQuality } = useDashboard();
 
   return (
     <main className="dashboard-app">
       <AppHeader activeTab={activeTab} onTabChange={setActiveTab} />
       <GlobalFilters />
+      <DataQualityBanner />
       <section
         id="dashboard-panel-realtime"
         className="dashboard-content"
