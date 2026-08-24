@@ -1,0 +1,81 @@
+[
+  {
+    "id": "EVAL-GMV-001",
+    "question": "今天GMV怎么样？和昨天比有什么变化？",
+    "contextFixture": { "rangeDays": 1, "seed": 20260808 },
+    "expect": {
+      "mustMentionMetrics": ["gmv"],
+      "signalsMustIncludeKpi": ["gmv"],
+      "summaryMustContainNumberFromContext": true,
+      "maxActions": 5
+    }
+  },
+  {
+    "id": "EVAL-REFUND-001",
+    "question": "退款率最近有没有异常？",
+    "contextFixture": { "rangeDays": 1, "seed": 20260808, "forceRefundSpike": true },
+    "expect": {
+      "mustMentionMetrics": ["refundRate"],
+      "risksOrSignalsMustReferenceAlert": "refundRate",
+      "summaryMustContainNumberFromContext": true,
+      "maxActions": 5
+    }
+  },
+  {
+    "id": "EVAL-CONV-001",
+    "question": "支付转化率下降是什么原因导致的？",
+    "contextFixture": { "rangeDays": 7, "seed": 20260808, "forceConversionDrop": true },
+    "expect": {
+      "mustMentionMetrics": ["conversionRate"],
+      "causesMustHaveEvidence": true,
+      "summaryMustContainNumberFromContext": true
+    }
+  },
+  {
+    "id": "EVAL-INVENTORY-001",
+    "question": "有没有库存风险需要处理？",
+    "contextFixture": { "rangeDays": 1, "seed": 20260808, "forceLowStock": true },
+    "expect": {
+      "risksOrSignalsMustReferenceAlert": "inventoryDays",
+      "actionsMustHaveOwnerAndValidation": true,
+      "maxActions": 5
+    }
+  },
+  {
+    "id": "EVAL-TARGET-001",
+    "question": "本月目标完成进度落后了吗？",
+    "contextFixture": { "rangeDays": 30, "seed": 20260808 },
+    "expect": {
+      "mustMentionMetrics": ["targetAchievementRate"],
+      "summaryMustContainNumberFromContext": true
+    }
+  },
+  {
+    "id": "EVAL-CHANNEL-001",
+    "question": "哪个渠道对GMV贡献最大？投入产出合理吗？",
+    "contextFixture": { "rangeDays": 7, "seed": 20260808 },
+    "expect": {
+      "causesMustHaveEvidence": true,
+      "summaryMustContainNumberFromContext": true,
+      "maxActions": 5
+    }
+  },
+  {
+    "id": "EVAL-AOV-001",
+    "question": "客单价是多少？相比之前变化如何？",
+    "contextFixture": { "rangeDays": 1, "seed": 20260808 },
+    "expect": {
+      "mustMentionMetrics": ["averageOrderValue"],
+      "signalsMustIncludeKpi": ["averageOrderValue"]
+    }
+  },
+  {
+    "id": "EVAL-NETSALES-001",
+    "question": "净销售额和毛利率的表现怎么样？",
+    "contextFixture": { "rangeDays": 30, "seed": 20260808 },
+    "expect": {
+      "mustMentionMetrics": ["netSales", "grossMarginRate"],
+      "signalsMustIncludeKpi": ["grossMarginRate"]
+    }
+  }
+]

@@ -14,8 +14,19 @@ const metricTitle = (metric: RequestAnalysisContext['alerts'][number]['metric'])
   inventoryDays: '库存天数',
 }[metric]);
 
+const kpiAliases: Record<string, { label: string; aliases: string[] }> = {
+  gmv: { label: 'GMV', aliases: ['gmv', '销售额', '交易'] },
+  netSales: { label: '净销售额', aliases: ['netSales', '净销售'] },
+  orderCount: { label: '订单量', aliases: ['orderCount', '订单'] },
+  conversionRate: { label: '转化率', aliases: ['conversionRate', '转化'] },
+  averageOrderValue: { label: '客单价', aliases: ['averageOrderValue', '客单价'] },
+  grossMarginRate: { label: '毛利率', aliases: ['grossMarginRate', '毛利'] },
+  refundRate: { label: '退款率', aliases: ['refundRate', '退款'] },
+  targetAchievementRate: { label: '目标达成率', aliases: ['targetAchievementRate', '目标'] },
+};
+
 export function createLocalAnalysis(
-  context: RequestAnalysisContext,
+  context: RequestAnalysisContext & { question?: string },
   fallbackReason: AnalysisFallbackReason,
   now: () => Date,
 ): AnalysisResult {
@@ -36,6 +47,19 @@ export function createLocalAnalysis(
     ...(contributor ? [{ label: '主要贡献', value: contributor.value, direction: 'flat' as const }] : []),
   ]);
 
+  // 按问题关键词补充相关 KPI 信号——本地模拟分析也应对题作答而非只报 GMV
+  const askedText = (context.question ?? '').toLowerCase();
+  for (const [key, meta] of Object.entries(kpiAliases)) {
+    if (signals.length >= 8) break;
+    const relevant = meta.aliases.some((alias) => alias.toLowerCase() !== key && askedText.includes(alias.toLowerCase()))
+      || askedText.includes(key.toLowerCase());
+    if (!relevant) continue;
+    const alreadyCovered = signals.some((s) => s.label === meta.label);
+    if (!alreadyCovered) {
+      const kpi = context.kpis[key as keyof RequestAnalysisContext['kpis']];
+      signals.push({ label: meta.label, value: kpi.value, direction: direction(kpi.changeRate) });
+    }
+  }
   if (signals.length === 0) {
     signals.push({ label: 'GMV', value: context.kpis.gmv.value, direction: direction(context.kpis.gmv.changeRate) });
   }

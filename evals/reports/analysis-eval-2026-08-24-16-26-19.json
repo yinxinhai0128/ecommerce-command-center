@@ -1,0 +1,146 @@
+{
+  "results": [
+    {
+      "id": "EVAL-GMV-001",
+      "passed": true,
+      "failures": [],
+      "source": "local",
+      "debug": {
+        "summary": "当前 GMV为 34630，目标达成概率为 60.4%。",
+        "signalLabels": [
+          "主要贡献"
+        ],
+        "causeLabels": [
+          "商品32",
+          "搜索",
+          "华南"
+        ]
+      }
+    },
+    {
+      "id": "EVAL-REFUND-001",
+      "passed": true,
+      "failures": [],
+      "source": "local",
+      "debug": {
+        "summary": "发现 1 项经营预警，退款率异常上升需优先处理。",
+        "signalLabels": [
+          "退款率",
+          "主要贡献"
+        ],
+        "causeLabels": [
+          "退款率异常上升"
+        ]
+      }
+    },
+    {
+      "id": "EVAL-CONV-001",
+      "passed": false,
+      "failures": [
+        "metric_not_mentioned:conversionRate"
+      ],
+      "source": "local",
+      "debug": {
+        "summary": "当前 GMV为 238816，目标达成概率为 60.4%。",
+        "signalLabels": [
+          "主要贡献"
+        ],
+        "causeLabels": [
+          "商品25",
+          "搜索",
+          "华北"
+        ]
+      }
+    },
+    {
+      "id": "EVAL-INVENTORY-001",
+      "passed": true,
+      "failures": [],
+      "source": "local",
+      "debug": {
+        "summary": "发现 1 项经营预警，商品库存不足需优先处理。",
+        "signalLabels": [
+          "库存天数",
+          "主要贡献"
+        ],
+        "causeLabels": [
+          "商品库存不足"
+        ]
+      }
+    },
+    {
+      "id": "EVAL-TARGET-001",
+      "passed": true,
+      "failures": [],
+      "source": "local",
+      "debug": {
+        "summary": "当前 GMV为 1005536，目标达成概率为 60.4%。",
+        "signalLabels": [
+          "主要贡献"
+        ],
+        "causeLabels": [
+          "商品29",
+          "搜索",
+          "华南"
+        ]
+      }
+    },
+    {
+      "id": "EVAL-CHANNEL-001",
+      "passed": true,
+      "failures": [],
+      "source": "local",
+      "debug": {
+        "summary": "当前 GMV为 238816，目标达成概率为 60.4%。",
+        "signalLabels": [
+          "主要贡献"
+        ],
+        "causeLabels": [
+          "商品25",
+          "搜索",
+          "华北"
+        ]
+      }
+    },
+    {
+      "id": "EVAL-AOV-001",
+      "passed": false,
+      "failures": [
+        "metric_not_mentioned:averageOrderValue"
+      ],
+      "source": "local",
+      "debug": {
+        "summary": "当前 GMV为 34630，目标达成概率为 60.4%。",
+        "signalLabels": [
+          "主要贡献"
+        ],
+        "causeLabels": [
+          "商品32",
+          "搜索",
+          "华南"
+        ]
+      }
+    },
+    {
+      "id": "EVAL-NETSALES-001",
+      "passed": false,
+      "failures": [
+        "metric_not_mentioned:netSales",
+        "metric_not_mentioned:grossMarginRate"
+      ],
+      "source": "local",
+      "debug": {
+        "summary": "当前 GMV为 1005536，目标达成概率为 60.4%。",
+        "signalLabels": [
+          "主要贡献"
+        ],
+        "causeLabels": [
+          "商品29",
+          "搜索",
+          "华南"
+        ]
+      }
+    }
+  ],
+  "passRate": 0.625
+}

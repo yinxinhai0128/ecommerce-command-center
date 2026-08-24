@@ -1,0 +1,64 @@
+{
+  "results": [
+    {
+      "id": "EVAL-GMV-001",
+      "passed": true,
+      "failures": [],
+      "source": "local"
+    },
+    {
+      "id": "EVAL-REFUND-001",
+      "passed": false,
+      "failures": [
+        "metric_not_mentioned:refundRate"
+      ],
+      "source": "local"
+    },
+    {
+      "id": "EVAL-CONV-001",
+      "passed": false,
+      "failures": [
+        "metric_not_mentioned:conversionRate"
+      ],
+      "source": "local"
+    },
+    {
+      "id": "EVAL-INVENTORY-001",
+      "passed": true,
+      "failures": [],
+      "source": "local"
+    },
+    {
+      "id": "EVAL-TARGET-001",
+      "passed": false,
+      "failures": [
+        "metric_not_mentioned:targetAchievementRate"
+      ],
+      "source": "local"
+    },
+    {
+      "id": "EVAL-CHANNEL-001",
+      "passed": true,
+      "failures": [],
+      "source": "local"
+    },
+    {
+      "id": "EVAL-AOV-001",
+      "passed": false,
+      "failures": [
+        "metric_not_mentioned:averageOrderValue"
+      ],
+      "source": "local"
+    },
+    {
+      "id": "EVAL-NETSALES-001",
+      "passed": false,
+      "failures": [
+        "metric_not_mentioned:netSales",
+        "metric_not_mentioned:grossMarginRate"
+      ],
+      "source": "local"
+    }
+  ],
+  "passRate": 0.375
+}
