@@ -154,7 +154,7 @@ function main(): number {
     );
 
     const failures = judge(caseItem, result, context as unknown as Record<string, unknown>, alerts);
-    results.push({ id: caseItem.id, passed: failures.length === 0, failures, source: result.source);
+    results.push({ id: caseItem.id, passed: failures.length === 0, failures, source: result.source });
     console.log(`[${caseItem.id}] ${failures.length === 0 ? 'PASS' : 'FAIL ' + failures.join(',')}`);
   }
 
